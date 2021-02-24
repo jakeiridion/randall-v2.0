@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from threading import Thread
 import struct
-from time import sleep
+import time
 import socket
 from queue import Queue
 
@@ -50,16 +50,16 @@ class Client:
         self.__management_connection.setblocking(True)
         self.__initialize_management_connection()
 
-        self.__buffer = Queue()
-
         self.__use_custom_resolution = False
         self.__height, self.__width = self.__request_resolution()
+
         self.__frame_byte_length = self.__height * self.__width * 3
+        self.__chunk_size = 45000
+
+        self.capture = Capture((self.__height, self.__width))
 
         self.__udp_connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__frame_byte_length * 4)
-
-        self.dtype = np.dtype(np.uint8)
+        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__frame_byte_length * 2)
 
     def __initialize_management_connection(self):
         self.__management_connection.connect((self.__ip, self.__port))
@@ -78,16 +78,34 @@ class Client:
         print(height, width)
         return height, width
 
-    def get_resolution(self):
-        return self.__height, self.__width
+    def listen_for_commands(self):
+        while True:
+            command = self.__management_connection.recv(2)
+            if command == struct.pack(">?", True):  # Start stream
+                print("started")
+                self.start_stream()
+
+    def request_stream_start(self):
+        self.__management_connection.send(struct.pack(">?", True))
+
+    def start_stream(self):
+        def loop():
+            self.capture.start()
+            while self.capture.is_running():
+                frame = self.capture.get_frame()
+                frame_in_bytes = frame.tobytes()
+                for chunk_number in range(int(self.__frame_byte_length / self.__chunk_size) + 1):
+                    self.__udp_connection.sendto(
+                        struct.pack(">H", chunk_number) + frame_in_bytes[
+                                                          self.__chunk_size * chunk_number:self.__chunk_size * (
+                                                                      chunk_number + 1)],
+                        (self.__ip, self.__port))
+                    time.sleep(0.0001)
+
+        Thread(target=loop, daemon=True).start()
 
 
 if __name__ == '__main__':
     client = Client()
-    capture = Capture(client.get_resolution())
-    capture.start()
-
-    while capture.is_running():
-        frame = capture.get_frame()
-        cv2.waitKey(1)
-        cv2.imshow("frame", frame)
+    client.request_stream_start()
+    client.listen_for_commands()
