@@ -16,6 +16,7 @@ class Camera:
         self.width = width
         self.frame_byte_size = self.height * self.width * 3
         self.is_running = False
+        self.threads = []
 
 
 class Server:
@@ -29,7 +30,7 @@ class Server:
         self.__ip = socket.gethostbyname(socket.gethostname())
         self.__port = 5050
 
-        self.__chunk_size = 45000
+        self.__chunk_size = 65000
 
         self.__management_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__management_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
@@ -38,7 +39,7 @@ class Server:
 
         self.__udp_connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # TODO: frame byte length changes depending on camera.
-        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.__frame_byte_length * 2)
+        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.__frame_byte_length * 5)
         self.__udp_connection.bind((self.__ip, self.__port))
 
         self.__udp_buffer = Queue()
@@ -78,12 +79,8 @@ class Server:
                 elif request == b"ex":  # exit
                     conn.close()
                     del self.cameras[ip]
-                elif request == struct.pack(">?", True):
+                elif request == struct.pack(">?", True):  # start stream
                     self.ready_stream(ip)
-
-                elif request == struct.pack(">?", False):
-                    # stop sending frames
-                    pass
 
                 # TODO: fill other possible requests
 
@@ -101,44 +98,58 @@ class Server:
         def loop():
             while True:
                 chunk, addr = self.__udp_buffer.get()
-                # print(chunk)
                 self.cameras[addr[0]].frame_chunks.put(chunk)
 
         Thread(target=loop, daemon=True).start()
 
     def __handle_chunk_queue(self, ip):
         def loop():
-            while True:
-                frame = b""
+            while self.cameras[ip].is_running is True:
+                buffer = b""
                 #t = []
                 for chunk_number in range(int(self.cameras[ip].frame_byte_size / self.__chunk_size) + 1):
                     data = self.cameras[ip].frame_chunks.get()
                     #t.append(struct.unpack(">H", data[:struct.calcsize(">H")]))
-                    frame += data[struct.calcsize(">H"):]
+                    buffer += data[struct.calcsize(">H"):]
                 #print(t)
                 #print(len(t))
-                self.cameras[ip].frames.put(self.__format_frame(frame, ip))
+                self.cameras[ip].frames.put(self.__format_frame(buffer, ip))
 
-        Thread(target=loop, daemon=True).start()
+        t = Thread(target=loop, daemon=True)
+        t.start()
+        self.cameras[ip].threads.append(t)
 
     def __format_frame(self, frame, ip):
         return np.reshape(np.frombuffer(frame, dtype=np.uint8), (self.cameras[ip].height, self.cameras[ip].width, 3))
 
     def __handle_frame_queue(self, ip):
         def loop():
-            while True:
+            while self.cameras[ip].is_running is True:
+                if self.cameras[ip].frames.empty():
+                    continue
                 # TODO: save frame to file (.h264/.h265)
-                frame = self.cameras[ip].frames.get()
-                cv2.waitKey(1)
-                cv2.imshow("frame", frame)
 
-        loop()
-        # Thread(target=loop, daemon=True).start()
+        # t = Thread(target=loop, daemon=True)
+        # t.start()
+        # self.cameras[ip].threads.append(t)
 
     def ready_stream(self, ip):
+        self.cameras[ip].is_running = True
         self.__handle_chunk_queue(ip)
         # self.__handle_frame_queue(ip)
         self.cameras[ip].management_connection.send(struct.pack(">?", True))
+
+    def stop_stream(self, ip):
+        if self.cameras[ip].is_running is True:
+            self.cameras[ip].is_running = False
+        self.join_camera_threads(ip)
+        self.cameras[ip].management_connection.send(struct.pack(">?", False))
+        self.cameras[ip].management_connection.close()
+        del self.cameras[ip]
+
+    def join_camera_threads(self, ip):
+        for thread in self.cameras[ip].threads:
+            thread.join()
 
 
 if __name__ == '__main__':

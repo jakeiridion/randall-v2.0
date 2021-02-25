@@ -7,6 +7,9 @@ import socket
 from queue import Queue
 
 
+threads = []
+
+
 class Capture:
     def __init__(self, resolution):
         self.__is_running = False
@@ -17,6 +20,7 @@ class Capture:
         self.__buffer = Queue()
 
     def get_frame(self):
+        # TODO: set timeouts
         return self.__buffer.get()
 
     def is_running(self):
@@ -34,7 +38,9 @@ class Capture:
                 self.__buffer.put(frame)
             cap.release()
 
-        Thread(target=loop, daemon=True).start()
+        t = Thread(target=loop, daemon=True)
+        t.start()
+        threads.append(t)
 
     def stop(self):
         self.__is_running = False
@@ -54,12 +60,12 @@ class Client:
         self.__height, self.__width = self.__request_resolution()
 
         self.__frame_byte_length = self.__height * self.__width * 3
-        self.__chunk_size = 45000
+        self.__chunk_size = 65000
 
         self.capture = Capture((self.__height, self.__width))
 
         self.__udp_connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__frame_byte_length * 2)
+        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__frame_byte_length * 5)
 
     def __initialize_management_connection(self):
         self.__management_connection.connect((self.__ip, self.__port))
@@ -82,8 +88,14 @@ class Client:
         while True:
             command = self.__management_connection.recv(2)
             if command == struct.pack(">?", True):  # Start stream
-                print("started")
                 self.start_stream()
+            elif command == struct.pack(">?", False):  # Stop Stream
+                self.__stop_stream()
+                break
+
+    def __join_all_threads(self):
+        for thread in threads:
+            thread.join()
 
     def request_stream_start(self):
         self.__management_connection.send(struct.pack(">?", True))
@@ -100,9 +112,18 @@ class Client:
                                                           self.__chunk_size * chunk_number:self.__chunk_size * (
                                                                       chunk_number + 1)],
                         (self.__ip, self.__port))
-                    time.sleep(0.0001)
+                    #time.sleep(0.0001)
 
-        Thread(target=loop, daemon=True).start()
+        t = Thread(target=loop, daemon=True)
+        t.start()
+        threads.append(t)
+
+    def __stop_stream(self):
+        self.capture.stop()
+        self.__join_all_threads()
+
+    def start_client(self):
+        pass
 
 
 if __name__ == '__main__':
