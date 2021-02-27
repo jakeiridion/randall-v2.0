@@ -30,7 +30,7 @@ class Server:
         self.__ip = socket.gethostbyname(socket.gethostname())
         self.__port = 5050
 
-        self.__chunk_size = 65000
+        self.__chunk_size = 20000
 
         self.__management_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__management_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
@@ -76,6 +76,7 @@ class Server:
                 elif request == b"sr":  # set resolution
                     resolution = struct.unpack(">2H", conn.recv(struct.calcsize(">2H")))
                     self.cameras[ip].height, self.cameras[ip].width = resolution
+                    self.cameras[ip].frame_byte_size = self.cameras[ip].height * self.cameras[ip].width * 3
                 elif request == b"ex":  # exit
                     conn.close()
                     del self.cameras[ip]
@@ -107,6 +108,7 @@ class Server:
             while self.cameras[ip].is_running is True:
                 buffer = b""
                 #t = []
+                #print(int(self.__frame_byte_length / self.__chunk_size) + 1)
                 for chunk_number in range(int(self.cameras[ip].frame_byte_size / self.__chunk_size) + 1):
                     data = self.cameras[ip].frame_chunks.get()
                     #t.append(struct.unpack(">H", data[:struct.calcsize(">H")]))
