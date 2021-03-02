@@ -139,6 +139,7 @@ class Client:
 
     def __initialize_management_connection(self):
         self.__management_connection.send(self.__identifier)
+        # TODO: Receive Chunk size
 
     def __request_resolution(self):
         if not config.use_custom_resolution:
@@ -192,6 +193,7 @@ class Client:
                                     (255, 255, 255), 1)
 
                 # Record time:
+                # TODO: Make sure the rec timer is leveled with the date.
                 frame = cv2.rectangle(frame, ((self.__width - 10) - 95, self.__height - 5),
                                       (self.__width - 10, self.__height - 25), (0, 0, 0), -1)
                 frame = cv2.putText(frame, self.capture.record_time, ((self.__width - 10) - 95, self.__height - 10),

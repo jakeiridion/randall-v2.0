@@ -30,7 +30,7 @@ class Server:
         self.__ip = socket.gethostbyname(socket.gethostname())
         self.__port = 5050
 
-        self.__chunk_size = 20000
+        self.__chunk_size = 65000
 
         self.__management_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__management_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
@@ -107,19 +107,36 @@ class Server:
         def loop():
             while self.cameras[ip].is_running is True:
                 buffer = b""
-                #t = []
-                #print(int(self.__frame_byte_length / self.__chunk_size) + 1)
-                for chunk_number in range(int(self.cameras[ip].frame_byte_size / self.__chunk_size) + 1):
+                # t = []
+                number_of_iterations = int((self.cameras[ip].frame_byte_size / self.__chunk_size) + 1)
+                chunk_number = 0
+                while chunk_number < number_of_iterations:
+                    # print(self.cameras[ip].frame_byte_size - len(buffer))
                     data = self.cameras[ip].frame_chunks.get()
-                    #t.append(struct.unpack(">H", data[:struct.calcsize(">H")]))
-                    buffer += data[struct.calcsize(">H"):]
-                #print(t)
-                #print(len(t))
+                    frame_count = struct.unpack(">H", data[:struct.calcsize(">H")])[0]
+                    # t.append(struct.unpack(">H", data[:struct.calcsize(">H")]))
+                    buffer += b"\x00" * self.__calculate_missing_chunks(frame_count, chunk_number) \
+                              + data[struct.calcsize(">H"):] if frame_count >= chunk_number \
+                        else b"\x00" * self.__calculate_last_missing_chunks(number_of_iterations, chunk_number,
+                                                                            self.cameras[ip].frame_byte_size,
+                                                                            len(buffer))
+                    chunk_number = frame_count + 1 if frame_count >= chunk_number else number_of_iterations
+                # print(3*1280*720, len(buffer))
+                # print(t)
+                # print(len(t))
                 self.cameras[ip].frames.put(self.__format_frame(buffer, ip))
 
         t = Thread(target=loop, daemon=True)
         t.start()
         self.cameras[ip].threads.append(t)
+
+    def __calculate_missing_chunks(self, frame_count, chunk_number):
+        return self.__chunk_size * (frame_count - chunk_number)
+
+    def __calculate_last_missing_chunks(self, number_of_iterations, chunk_number, frame_byte_size, buffer_length):
+        full_missing_chunks = self.__chunk_size * (number_of_iterations - chunk_number - 1)
+        rest_of_frame = frame_byte_size - (buffer_length + full_missing_chunks)
+        return full_missing_chunks + rest_of_frame
 
     def __format_frame(self, frame, ip):
         return np.reshape(np.frombuffer(frame, dtype=np.uint8), (self.cameras[ip].height, self.cameras[ip].width, 3))
