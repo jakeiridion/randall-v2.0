@@ -11,11 +11,60 @@ import configparser
 threads = []
 
 
+def join_all_threads():
+    for thread in threads:
+        thread.join()
+
+
 class Config:
     def __init__(self):
-        config = configparser.ConfigParser()
-        config.read("client.ini")
-        print(config.sections())
+        client_config = configparser.ConfigParser()
+        client_config.read("client.ini")
+        # Network Variables
+        self.ip = client_config["Network"]["IP"]
+        self.port = client_config["Network"].getint("PORT")
+        self.udp_receive_buffer = client_config["Network"].getint("UdpReceiveBuffer")
+        self.chunk_size = client_config["Network"].getint("ChunkSize")
+        self.wait_after_frame = client_config["Network"].getfloat("WaitAfterFrame")
+        # Camera Variables
+        self.capture_device = client_config["VideoCapture"].getint("CaptureDevice")
+        self.use_custom_resolution = client_config["VideoCapture"].getboolean("UseCustomResolution")
+        self.custom_frame_height = client_config["VideoCapture"].getint("CustomFrameHeight")
+        self.custom_frame_width = client_config["VideoCapture"].getint("CustomFrameWidth")
+        # Check Values
+        self.__check_network_settings()
+        self.__check_video_capture_settings()
+
+    def __check_network_settings(self):
+        try:
+            socket.inet_aton(self.ip)
+        except socket.error:
+            raise Exception("BAD IP ADDRESS")
+
+        if self.port > 65535 or self.port < 1:
+            raise Exception("BAD PORT")
+
+        if self.udp_receive_buffer < 1:
+            raise Exception("BAD UDP RECEIVE BUFFER")
+
+        if self.chunk_size < 1 or self.chunk_size > 65500:
+            raise Exception("BAD CHUNK SIZE")
+
+        if self.wait_after_frame < 0:
+            raise Exception("BAD WAIT VALUE")
+
+    def __check_video_capture_settings(self):
+        if self.capture_device < 0:
+            raise Exception("BAD CAPTURE DEVICE")
+
+        if self.custom_frame_height < 0 and self.use_custom_resolution:
+            raise Exception("BAD FRAME HEIGHT")
+
+        if self.custom_frame_width < 0 and self.use_custom_resolution:
+            raise Exception("BAD FRAME WIDTH")
+
+
+config = Config()
 
 
 class Capture:
@@ -37,7 +86,7 @@ class Capture:
 
     def start(self):
         self.__is_running = True
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(config.capture_device)
 
         def loop():
             while self.__is_running:
@@ -56,26 +105,27 @@ class Capture:
 
 class Client:
     def __init__(self):
-        self.__ip = socket.gethostbyname(socket.gethostname())  # TODO: change with netifaces
-        self.__port = 5050
+        self.__ip = socket.gethostbyname(socket.gethostname())  # config.ip # TODO: change with netifaces
+        self.__port = config.port
         self.__identifier = b"c"  # camera
 
         self.__management_connection = self.__create_management_connection()
         self.__management_connection.setblocking(True)
         self.__initialize_management_connection()
 
-        self.__use_custom_resolution = False
-        self.__height, self.__width = self.__request_resolution()
+        self.__height, self.__width = (config.custom_frame_height, config.custom_frame_width)\
+            if config.use_custom_resolution else self.__request_resolution()
+        self.__update_server_resolution_if_necessary()
 
         self.__frame_byte_length = self.__height * self.__width * 3
-        self.__chunk_size = 20000
+        self.__chunk_size = config.chunk_size
 
         self.capture = Capture((self.__height, self.__width))
 
         self.__udp_connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.__frame_byte_length * 5)
+        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 7456540)
 
-        self.formatted_frame = Queue()
+        self.formatted_frames = Queue()
 
     def __create_management_connection(self):
         # TODO: make sure a connection to the server lan is established.
@@ -91,17 +141,15 @@ class Client:
         self.__management_connection.send(self.__identifier)
 
     def __request_resolution(self):
-        if self.__use_custom_resolution is False:
+        if not config.use_custom_resolution:
             self.__management_connection.send(b"gr")  # get resolution
             resolution = struct.unpack(">2H", self.__management_connection.recv(struct.calcsize(">2H")))
-            height, width = resolution
-        else:
-            # TODO: make .conf with custom resolution option
-            height, width = (480, 640)
+            return resolution
+
+    def __update_server_resolution_if_necessary(self):
+        if config.use_custom_resolution:
             self.__management_connection.send(b"sr")  # set resolution
-            self.__management_connection.send(struct.pack(">2H", height, width))
-        print(height, width)
-        return height, width
+            self.__management_connection.send(struct.pack(">2H", self.__height, self.__width))
 
     def listen_for_commands(self):
         while True:
@@ -111,10 +159,6 @@ class Client:
             elif command == struct.pack(">?", False):  # Stop Stream
                 self.__stop_stream()
                 break
-
-    def __join_all_threads(self):
-        for thread in threads:
-            thread.join()
 
     def request_stream_start(self):
         self.__management_connection.send(struct.pack(">?", True))
@@ -126,14 +170,13 @@ class Client:
 
         def loop():
             while self.capture.is_running():
-                frame = self.formatted_frame.get()
+                frame = self.formatted_frames.get()
                 for chunk_number in range(int(self.__frame_byte_length / self.__chunk_size) + 1):
                     self.__udp_connection.sendto(
                         struct.pack(">H", chunk_number) + frame[
                                                           self.__chunk_size * chunk_number:self.__chunk_size * (
-                                                                  chunk_number + 1)],
-                        (self.__ip, self.__port))
-                    #time.sleep(0.0002)
+                                                                  chunk_number + 1)], (self.__ip, self.__port))
+                    time.sleep(config.wait_after_frame)
 
         t = Thread(target=loop, daemon=True).start()
         threads.append(t)
@@ -154,7 +197,7 @@ class Client:
                 frame = cv2.putText(frame, self.capture.record_time, ((self.__width - 10) - 95, self.__height - 10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 frame = frame.tobytes()
-                self.formatted_frame.put(frame)
+                self.formatted_frames.put(frame)
 
         t = Thread(target=loop, daemon=True).start()
         threads.append(t)
@@ -177,7 +220,7 @@ class Client:
 
     def __stop_stream(self):
         self.capture.stop()
-        self.__join_all_threads()
+        join_all_threads()
 
     def start_client(self):
         self.request_stream_start()
