@@ -27,7 +27,7 @@ class Server:
         self.__width = 640
         self.__frame_byte_length = self.__height * self.__width * 3
 
-        self.__ip = socket.gethostbyname(socket.gethostname())
+        self.__ip = "192.168.3.6"
         self.__port = 5050
 
         self.__chunk_size = 65000
@@ -176,6 +176,6 @@ if __name__ == '__main__':
     while True:
         if server.cameras == {}:
             continue
-        frame = server.cameras["127.0.0.1"].frames.get()
+        frame = server.cameras["192.168.3.6"].frames.get()
         cv2.waitKey(1)
         cv2.imshow("frame", frame)

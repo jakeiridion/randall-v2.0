@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 from threading import Thread
 import struct
 import time
@@ -105,7 +104,7 @@ class Capture:
 
 class Client:
     def __init__(self):
-        self.__ip = socket.gethostbyname(socket.gethostname())  # config.ip # TODO: change with netifaces
+        self.__ip = config.ip
         self.__port = config.port
         self.__identifier = b"c"  # camera
 
