@@ -20,8 +20,8 @@ class Config:
         client_config = configparser.ConfigParser()
         client_config.read("client.ini")
         # Network Variables
-        self.ip = client_config["Network"]["IP"]
-        self.port = client_config["Network"].getint("PORT")
+        self.ip = client_config["Network"]["ServerIP"]
+        self.port = client_config["Network"].getint("ServerPORT")
         self.udp_receive_buffer = client_config["Network"].getint("UdpReceiveBuffer")
         self.chunk_size = client_config["Network"].getint("ChunkSize")
         self.wait_after_frame = client_config["Network"].getfloat("WaitAfterFrame")

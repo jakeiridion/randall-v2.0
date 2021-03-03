@@ -115,12 +115,13 @@ class Server:
                     data = self.cameras[ip].frame_chunks.get()
                     frame_count = struct.unpack(">H", data[:struct.calcsize(">H")])[0]
                     # t.append(struct.unpack(">H", data[:struct.calcsize(">H")]))
-                    buffer += b"\x00" * self.__calculate_missing_chunks(frame_count, chunk_number) \
+                    buffer += b"\x00" * self.__calculate_chunks(frame_count, chunk_number) \
                               + data[struct.calcsize(">H"):] if frame_count >= chunk_number \
-                        else b"\x00" * self.__calculate_last_missing_chunks(number_of_iterations, chunk_number,
-                                                                            self.cameras[ip].frame_byte_size,
-                                                                            len(buffer))
+                        else b"\x00" * self.__calculate_chunks(number_of_iterations, chunk_number)
                     chunk_number = frame_count + 1 if frame_count >= chunk_number else number_of_iterations
+                # The buffer is to large when the final chunk disappears and it is replaced with a full chunk of
+                # darkness even tough the last bit of the frame doesnt have the same size as the inserted chunk.
+                buffer = buffer[:self.cameras[ip].frame_byte_size]
                 # print(3*1280*720, len(buffer))
                 # print(t)
                 # print(len(t))
@@ -130,13 +131,8 @@ class Server:
         t.start()
         self.cameras[ip].threads.append(t)
 
-    def __calculate_missing_chunks(self, frame_count, chunk_number):
-        return self.__chunk_size * (frame_count - chunk_number)
-
-    def __calculate_last_missing_chunks(self, number_of_iterations, chunk_number, frame_byte_size, buffer_length):
-        full_missing_chunks = self.__chunk_size * (number_of_iterations - chunk_number - 1)
-        rest_of_frame = frame_byte_size - (buffer_length + full_missing_chunks)
-        return full_missing_chunks + rest_of_frame
+    def __calculate_chunks(self, x, y):
+        return self.__chunk_size * (x - y)
 
     def __format_frame(self, frame, ip):
         return np.reshape(np.frombuffer(frame, dtype=np.uint8), (self.cameras[ip].height, self.cameras[ip].width, 3))
