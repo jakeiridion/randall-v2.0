@@ -30,7 +30,7 @@ class Server:
         self.__ip = "192.168.3.6"
         self.__port = 5050
 
-        self.__chunk_size = 65000
+        self.__chunk_size = 25000
 
         self.__management_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__management_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
@@ -77,6 +77,8 @@ class Server:
                     resolution = struct.unpack(">2H", conn.recv(struct.calcsize(">2H")))
                     self.cameras[ip].height, self.cameras[ip].width = resolution
                     self.cameras[ip].frame_byte_size = self.cameras[ip].height * self.cameras[ip].width * 3
+                elif request == b"gc":  # get chunk_size
+                    conn.send(struct.pack(">H", self.__chunk_size))
                 elif request == b"ex":  # exit
                     conn.close()
                     del self.cameras[ip]
@@ -169,6 +171,13 @@ class Server:
 
 if __name__ == '__main__':
     server = Server()
+
+    def test():
+        time.sleep(10)
+        server.stop_stream("192.168.3.6")
+
+    Thread(target=test, daemon=True).start()
+
     while True:
         if server.cameras == {}:
             continue
