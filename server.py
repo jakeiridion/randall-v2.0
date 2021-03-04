@@ -30,7 +30,7 @@ class Server:
         self.__ip = "192.168.3.6"
         self.__port = 5050
 
-        self.__chunk_size = 25000
+        self.__chunk_size = 50000
 
         self.__management_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__management_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
@@ -171,12 +171,6 @@ class Server:
 
 if __name__ == '__main__':
     server = Server()
-
-    def test():
-        time.sleep(10)
-        server.stop_stream("192.168.3.6")
-
-    Thread(target=test, daemon=True).start()
 
     while True:
         if server.cameras == {}:

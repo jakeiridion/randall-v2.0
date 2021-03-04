@@ -247,11 +247,13 @@ class Client:
             command = self.__management_connection.recv(1)
             logger.debug(f"Command received: {command}")
             if command == struct.pack(">?", True):  # Start stream
-                logger.info("starting stream...")
                 self.__start_stream()
             elif command == struct.pack(">?", False):  # Stop Stream
                 self.__stop_stream()
                 break
+            elif command == b"":  # Server crashed.
+                pass
+            # TODO: stop client when server disconnects
         logger.debug("stop listening for commands.")
 
     def request_stream_start(self):
@@ -259,13 +261,14 @@ class Client:
         self.__management_connection.send(struct.pack(">?", True))
 
     def __start_stream(self):
-        logger.debug("initializing stream...")
+        logger.info("starting stream...")
         self.capture.start()
         self.__start_record_timer()
         self.__start_formatting_frames()
-        logger.debug("stream initialized. %s", "streaming...")
+        logger.debug("stream started.")
 
         def loop():
+            logger.info("streaming...")
             while self.capture.is_running():
                 frame = self.formatted_frames.get()
                 for chunk_number in range(int(self.__frame_byte_length / self.__chunk_size) + 1):
