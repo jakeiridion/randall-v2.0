@@ -8,6 +8,7 @@ from datetime import datetime
 import configparser
 import logging
 import sys
+import signal
 
 
 def initiate_logger():
@@ -30,7 +31,9 @@ def join_all_threads():
     for thread in threads:
         logger.debug(f"joining thread: {thread}")
         thread.join()
+        logger.debug(f"thread joined: {thread}")
     logger.debug("all threads joined.")
+    threads.clear()
 
 
 class Config:
@@ -45,8 +48,9 @@ class Config:
         logger.debug("Loading Network settings...")
         self.ip = client_config["Network"]["ServerIP"]
         self.port = client_config["Network"].getint("ServerPORT")
-        self.udp_receive_buffer = client_config["Network"].getint("UdpReceiveBuffer")
+        self.udp_send_buffer = client_config["Network"].getint("UdpSendBuffer")
         self.wait_after_frame = client_config["Network"].getfloat("WaitAfterFrame")
+        self.retry_after_crash = client_config["Network"].getint("RetryAfterCrash")
         logger.debug("Network settings loaded.")
         # Camera Variables
         logger.debug("Loading Camera settings.")
@@ -60,7 +64,6 @@ class Config:
         logger.debug("verifying settings.")
         self.__check_network_settings()
         self.__check_video_capture_settings()
-        # Log
         logger.info("Configuration file loaded.")
 
     def __handle_debug_mode(self):
@@ -94,7 +97,7 @@ class Config:
             raise Exception("BAD PORT")
 
         logger.debug("verifying UdpReceiveBuffer.")
-        if self.udp_receive_buffer < 1:
+        if self.udp_send_buffer < 1:
             logger.error("Bad udp receive value in config. %s", "Value can not be negative.")
             raise Exception("BAD UDP RECEIVE BUFFER")
 
@@ -102,6 +105,11 @@ class Config:
         if self.wait_after_frame < 0:
             logger.error("Bad wait value in config. %s", "Value can not be negative.")
             raise Exception("BAD WAIT VALUE")
+
+        logger.debug("verifying RetryAfterCrash")
+        if self.retry_after_crash < 0:
+            logger.error("Bad crash wait value in config. %s", "Value can not be negative.")
+            raise Exception("BAD CRASH WAIT VALUE")
 
     def __check_video_capture_settings(self):
         logger.debug("verifying CaptureDevice.")
@@ -175,6 +183,11 @@ class Capture:
         logger.debug("stopping Video Capture...")
         self.__is_running = False
 
+    def clear_queue(self):
+        logger.debug("clearing Video Capture Queue...")
+        self.__buffer = Queue()
+        logger.debug("Video Capture Queue cleared.")
+
 
 class Client:
     def __init__(self):
@@ -183,8 +196,9 @@ class Client:
         self.__port = config.port
         self.__identifier = b"c"  # camera
 
+        self.exit_after_crash = False
+
         self.__management_connection = self.__create_management_connection()
-        self.__management_connection.setblocking(True)
         self.__initialize_management_connection()
 
         self.__height, self.__width = (config.custom_frame_height, config.custom_frame_width) \
@@ -198,10 +212,7 @@ class Client:
 
         self.capture = Capture((self.__height, self.__width))
 
-        logger.debug("creating udp connection...")
-        self.__udp_connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__udp_connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 7456540)
-        logger.debug("udp connection created.")
+        self.__udp_connection = self.__create_udp_connection()
 
         self.formatted_frames = Queue()
         logger.debug("Client Class initiated.")
@@ -209,14 +220,24 @@ class Client:
     def __create_management_connection(self):
         # TODO: make sure a connection to the server lan is established.
         logger.debug("Creating management connection...")
-        while True:
+        # when the server crashes it will stop trying to connect after a time
+        # see: __handle_server_crash()
+        while not self.exit_after_crash:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             result = sock.connect_ex((self.__ip, self.__port))
             if result == 0:
+                sock.setblocking(True)
                 logger.debug("Management connection created.")
                 return sock
             sock.close()
             time.sleep(5)
+
+    def __create_udp_connection(self):
+        logger.debug("creating udp connection...")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, config.udp_send_buffer)
+        logger.debug("udp connection created.")
+        return sock
 
     def __initialize_management_connection(self):
         logger.debug("Initialize management connection.")
@@ -243,6 +264,7 @@ class Client:
 
     def listen_for_commands(self):
         logger.info("listening for commands...")
+        logger.info("client started.")
         while True:
             command = self.__management_connection.recv(1)
             logger.debug(f"Command received: {command}")
@@ -252,9 +274,51 @@ class Client:
                 self.__stop_stream()
                 break
             elif command == b"":  # Server crashed.
-                pass
-            # TODO: stop client when server disconnects
+                self.__handle_server_crash()
+                if self.exit_after_crash:
+                    break
         logger.debug("stop listening for commands.")
+
+    def __handle_server_crash(self):
+        logger.warning("Server crashed!")
+        logger.info("Handling server crash...")
+        self.__stop_stream()
+        logger.debug("closing socket connections...")
+        self.__management_connection.close()
+        logger.debug("management connection closed.")
+        self.__udp_connection.close()
+        logger.debug("udp connection closed.")
+        logger.debug("socket connections closed.")
+        logger.debug(f"RetryAfterCrash: {config.retry_after_crash}")
+        if config.retry_after_crash != 0:
+            def signal_handler(signum, frame):
+                logger.info("Server unreachable.")
+                logger.info("closing client...")
+                self.exit_after_crash = True
+            signal.signal(signal.SIGALRM, signal_handler)
+
+            logger.info(f"trying to reach server for {config.retry_after_crash} seconds...")
+            signal.alarm(config.retry_after_crash)
+            self.__management_connection = self.__create_management_connection()
+            signal.alarm(0)
+
+            if not self.exit_after_crash:
+                logger.info("Server successfully reached.")
+                logger.info("Server Crash handled.")
+                logger.info("Restarting client...")
+                self.__udp_connection = self.__create_udp_connection()
+                self.__initialize_management_connection()
+                self.request_stream_start()
+                logger.info("Client Successfully restarted.")
+        else:
+            logger.info("Server Crash handled.")
+            logger.debug("closing client...")
+            self.exit_after_crash = True
+
+    def __clear_queue(self):
+        logger.debug("Clearing formatted frame queue...")
+        self.formatted_frames = Queue()
+        logger.debug("formatted frame queue.")
 
     def request_stream_start(self):
         logger.info("requesting stream start.")
@@ -333,12 +397,14 @@ class Client:
         logger.info("stopping stream...")
         self.capture.stop()
         join_all_threads()
+        self.capture.clear_queue()
+        self.__clear_queue()
 
     def start_client(self):
         logger.info("starting client...")
         self.request_stream_start()
         self.listen_for_commands()
-        logger.info("closing client.")
+        logger.info("client closed.")
 
 
 if __name__ == '__main__':
