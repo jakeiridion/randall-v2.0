@@ -318,7 +318,7 @@ class Client:
     def __clear_queue(self):
         logger.debug("Clearing formatted frame queue...")
         self.formatted_frames = Queue()
-        logger.debug("formatted frame queue.")
+        logger.debug("formatted frame queue cleared.")
 
     def request_stream_start(self):
         logger.info("requesting stream start.")
