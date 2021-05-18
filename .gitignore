@@ -130,3 +130,7 @@ dmypy.json
 
 # Repository
 wpa_supplicant.conf
+sandbox.py
+old_files/server2.py
+old_files/old_server.py
+legacy/
