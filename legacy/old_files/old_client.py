@@ -15,7 +15,7 @@ import signal
 def initiate_logger():
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
-    file_handler = RotatingFileHandler("../legacy/client.log", maxBytes=10_000_000, backupCount=1)
+    file_handler = RotatingFileHandler("../client.log", maxBytes=10_000_000, backupCount=1)
     file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s:%(name)s:%(levelname)s:%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     file_handler.setFormatter(formatter)
