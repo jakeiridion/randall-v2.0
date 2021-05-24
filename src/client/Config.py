@@ -17,8 +17,7 @@ class Config:
         self.__logger.debug("Loading Network settings...")
         self.ip = client_config["Network"]["ServerIP"]
         self.port = client_config["Network"].getint("ServerPORT")
-        self.udp_send_buffer = client_config["Network"].getint("UdpSendBuffer")
-        self.wait_after_chunk = client_config["Network"].getfloat("WaitAfterChunk")
+        self.stream_send_buffer = client_config["Network"].getint("StreamSendBuffer")
         self.wait_after_frame = client_config["Network"].getfloat("WaitAfterFrame")
         self.retry_after_server_crash = client_config["Network"].getint("RetryAfterServerCrash")
         self.__logger.debug("Network settings loaded.")
@@ -56,15 +55,10 @@ class Config:
             self.__logger.error("Bad Port detected in config. %s", "Allowed ports: 1 < port < 65535")
             raise Exception("BAD PORT")
 
-        self.__logger.debug("verifying UdpSendBuffer.")
-        if self.udp_send_buffer < 1:
+        self.__logger.debug("verifying StreamSendBuffer.")
+        if self.stream_send_buffer < 1:
             self.__logger.error("Bad udp receive value in config. %s", "Value can not be negative.")
-            raise Exception("BAD UDP SEND BUFFER")
-
-        self.__logger.debug("verifying WaitAfterChunk.")
-        if self.wait_after_chunk < 0:
-            self.__logger.error("Bad wait value in config. %s", "Value can not be negative.")
-            raise Exception("BAD WAIT VALUE")
+            raise Exception("BAD STREAM SEND BUFFER VALUE")
 
         self.__logger.debug("verifying WaitAfterFrame.")
         if self.wait_after_frame < 0:

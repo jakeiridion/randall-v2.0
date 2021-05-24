@@ -1,5 +1,6 @@
 import logging
 from logging.handlers import RotatingFileHandler
+import os
 
 
 def __initiate_logger(name, log_path):
@@ -22,7 +23,13 @@ def __make_debug_logger(logger):
     return logger
 
 
+def __create_log_folder_if_necessary():
+    if not os.path.isdir("logs/"):
+        os.mkdir("logs")
+
+
 def create_logger(name, debug, log_path):
+    __create_log_folder_if_necessary()
     logger = __initiate_logger(name, log_path)
     if debug:
         logger = __make_debug_logger(logger)
