@@ -23,14 +23,17 @@ def __make_debug_logger(logger):
     return logger
 
 
-def __create_log_folder_if_necessary():
-    if not os.path.isdir("logs/"):
-        os.mkdir("logs")
+def __create_log_folder_if_necessary(log_path):
+    if not os.path.isdir(log_path):
+        os.mkdir(log_path)
 
 
-def create_logger(name, debug, log_path):
-    __create_log_folder_if_necessary()
-    logger = __initiate_logger(name, log_path)
+def create_logger(name, debug, log_filename):
+    root_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    log_path = os.path.join(root_path, "logs")
+    log_filename = os.path.join(log_path, log_filename)
+    __create_log_folder_if_necessary(log_path)
+    logger = __initiate_logger(name, log_filename)
     if debug:
         logger = __make_debug_logger(logger)
     return logger

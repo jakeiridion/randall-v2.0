@@ -3,15 +3,18 @@ import configparser
 import socket
 import cv2
 import sys
+import os
 
 
 class Config:
     def __init__(self):
         client_config = configparser.ConfigParser()
-        client_config.read("conf/client.ini")
+        conf_path = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "conf"),
+                                 "client.ini")
+        client_config.read(conf_path)
         # Default Variables
         self.debug_mode = client_config["DEVELOPER"].getboolean("DebugMode")
-        self.__logger = create_logger(__name__, self.debug_mode, "logs/client.log")
+        self.__logger = create_logger(__name__, self.debug_mode, "client.log")
         self.__logger.info("Loading Configuration file...")
         # Network Variables
         self.__logger.debug("Loading Network settings...")

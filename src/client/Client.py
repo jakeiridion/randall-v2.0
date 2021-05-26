@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from src.shared.Logger import create_logger
 from Config import config
 from Capture import Capture
@@ -11,7 +14,7 @@ from threading import Thread
 
 class Client:
     def __init__(self):
-        self.__logger = create_logger(__name__, config.debug_mode, "logs/client.log")
+        self.__logger = create_logger(__name__, config.debug_mode, "client.log")
         self.__logger.debug("Initializing Client Class...")
         self.__processes_threads = []
         # Network
@@ -22,8 +25,6 @@ class Client:
         self.__stream_connection = self.__create_connection()
         self.__initialize_connections()
         # Camera
-        self.__chunk_size = self.__request_chunk_size()
-        self.__logger.debug("chunk size set.")
         self.__resolution = (config.custom_frame_height, config.custom_frame_width) \
             if config.use_custom_resolution else self.__request_resolution()
         self.__update_server_resolution_if_necessary()
@@ -50,11 +51,6 @@ class Client:
         self.__logger.debug("Initialize stream connection.")
         self.__stream_connection.send(b"c")  # camera
 
-    def __request_chunk_size(self):
-        self.__logger.debug("requesting chunk size...")
-        self.__management_connection.send(b"gc")  # get chunk_size
-        return struct.unpack(">H", self.__management_connection.recv(struct.calcsize(">H")))[0]
-
     def __request_resolution(self):
         self.__logger.debug("request server resolution...")
         self.__management_connection.send(b"gr")  # get resolution
@@ -71,8 +67,13 @@ class Client:
 
     def run(self):
         self.__logger.info("starting client...")
+        self.__request_stream_start()
         self.__listen_for_commands()
         self.__logger.info("client closed.")
+
+    def __request_stream_start(self):
+        self.__logger.info("requesting stream start.")
+        self.__management_connection.send(struct.pack(">?", True))
 
     def __listen_for_commands(self):
         self.__logger.info("listening for commands...")
@@ -109,6 +110,7 @@ class Client:
                 conn.sendall(frame)
                 time.sleep(wait_frame)
             log.info("stream stopped.")
+
         p = mp.Process(target=loop, args=(self.__logger, self.__capture.is_running, pipe_out, self.__stream_connection,
                                           config.wait_after_frame), daemon=True)
         p.start()
@@ -161,6 +163,7 @@ class Client:
                 self.__logger.info("Restarting client...")
                 self.__initialize_connections()
                 self.__update_server_resolution_if_necessary()
+                self.__request_stream_start()
                 self.__logger.info("Client Successfully restarted.")
         else:
             self.__logger.info("Server Crash handled.")

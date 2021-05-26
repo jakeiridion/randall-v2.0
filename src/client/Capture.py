@@ -10,7 +10,7 @@ import time
 
 class Capture:
     def __init__(self, resolution):
-        self.logger = create_logger(__name__, config.debug_mode, "logs/client.log")
+        self.logger = create_logger(__name__, config.debug_mode, "client.log")
         self.logger.debug("Initializing Capture Class...")
         self.is_running = mp.Value(ctypes.c_bool, False)
         self.height, self.width = resolution  # frame.shape = (height, width, 3)
