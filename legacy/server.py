@@ -5,6 +5,7 @@ import multiprocessing as mp
 import struct
 import socket
 import logging
+from logging.handlers import RotatingFileHandler
 import configparser
 import time
 import ctypes
@@ -14,7 +15,7 @@ import math
 def initiate_logger():
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
-    file_handler = logging.FileHandler("client.log")
+    file_handler = RotatingFileHandler("server.log", maxBytes=10_000_000, backupCount=1)
     file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s:%(name)s:%(levelname)s:%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     file_handler.setFormatter(formatter)
@@ -57,11 +58,11 @@ class Server:
         self.__server_processes_threads = []
         # Variables
         self.__is_running = mp.Value(ctypes.c_bool, True)
-        self.__height = 480
-        self.__width = 640
+        self.__height = 320
+        self.__width = 480
         self.__ip = "192.168.3.6"
         self.__port = 5050
-        self.__chunk_size = 50000
+        self.__chunk_size = 65000
         # Network
         self.__management_connection = self.__create_management_connection()
         self.__udp_connection = self.__create_udp_connection()
@@ -206,8 +207,10 @@ class Server:
                 frame_byte_size = h * w * 3
                 iteration_amount = math.ceil(frame_byte_size / chunk_size)
                 expected_chunk_number = 0
+                t = time.time()
                 while expected_chunk_number < iteration_amount:
                     chunk = p_out.recv_bytes()
+                    #print(struct.unpack(">H", chunk[:struct.calcsize(">H")])[0])
                     test.append(struct.unpack(">H", chunk[:struct.calcsize(">H")]))
                     actual_chunk_number = struct.unpack(">H", chunk[:struct.calcsize(">H")])[0]
                     buffer += self.__calculate_missing_chunk(actual_chunk_number, expected_chunk_number, chunk_size) + \
@@ -215,9 +218,10 @@ class Server:
                         else self.__calculate_missing_chunk(iteration_amount, expected_chunk_number, chunk_size)
                     expected_chunk_number = actual_chunk_number + 1 if actual_chunk_number >= expected_chunk_number \
                         else iteration_amount
+                #print(time.time() - t)
                 buffer = buffer[:frame_byte_size]
-                print(test)
-                print(len(test))
+                #print(test)
+                #print(len(test))
                 p_in.send(self.__format_frame(buffer, h, w))
             log.debug("chunks assembled.")
 
