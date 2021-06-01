@@ -87,6 +87,11 @@ class Client:
             # Stop Stream
             elif command == struct.pack(">?", False):
                 self.__stop_stream()
+            # quit / shutdown
+            elif command == b"q":
+                if len(self.__processes_threads) > 0:
+                    self.__stop_stream()
+                self.__close_connections()
                 break
             # Server crashed
             elif command == b"":
@@ -105,10 +110,14 @@ class Client:
     def __start_streaming_process(self, pipe_out):
         def loop(log, is_running, pipe, conn, wait_frame):
             log.info("streaming...")
-            while is_running.value:
-                frame = pipe.recv_bytes()
-                conn.sendall(frame)
-                time.sleep(wait_frame)
+            try:
+                while is_running.value:
+                    frame = pipe.recv_bytes()
+                    conn.sendall(frame)
+                    time.sleep(wait_frame)
+            except (BrokenPipeError, OSError) as e:
+                log.warning(e)
+                log.debug("Handled TCP error from server crash.")
             log.info("stream stopped.")
 
         p = mp.Process(target=loop, args=(self.__logger, self.__capture.is_running, pipe_out, self.__stream_connection,
@@ -133,16 +142,19 @@ class Client:
         self.__logger.debug("all threads/processes joined.")
         self.__processes_threads.clear()
 
-    def __handle_server_crash(self):
-        self.__logger.warning("Server crashed!")
-        self.__logger.info("Handling server crash...")
-        self.__stop_stream()
+    def __close_connections(self):
         self.__logger.debug("closing socket connections...")
         self.__management_connection.close()
         self.__logger.debug("management connection closed.")
         self.__stream_connection.close()
         self.__logger.debug("stream connection closed.")
         self.__logger.debug("socket connections closed.")
+
+    def __handle_server_crash(self):
+        self.__logger.warning("Server crashed!")
+        self.__logger.info("Handling server crash...")
+        self.__stop_stream()
+        self.__close_connections()
         self.__logger.debug(f"RetryAfterServerCrash: {config.retry_after_server_crash}")
         if config.retry_after_server_crash != 0:
             def signal_handler(signum, frame):

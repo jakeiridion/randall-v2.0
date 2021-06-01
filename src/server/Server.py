@@ -1,3 +1,6 @@
+import sys
+import time
+
 from src.shared.Logger import create_logger
 from Config import config
 import multiprocessing as mp
@@ -5,7 +8,7 @@ import ctypes
 import socket
 from threading import Thread
 import struct
-
+# Delete Me
 import numpy as np
 import cv2
 
@@ -15,6 +18,7 @@ class Server:
         self.__logger = create_logger(__name__, config.debug_mode, "server.log")
         self.__logger.debug("[Server]: Initializing Server Class...")
         # Processes
+        self.__management_connections = {}
         self.__stream_connections = {}
         self.__camera_processes = {}
         self.__server_processes_threads = []
@@ -64,9 +68,10 @@ class Server:
         if identifier == b"m":
             self.__logger.debug(f"[{ip}]: management connection created.")
             self.__logger.debug("[Server]: processing new management connection...")
+            self.__management_connections[ip] = conn
             self.__handle_management_connection(conn, ip)
         # camera
-        elif identifier == b"c":
+        elif identifier == b"c" and self.__management_connections.get(ip) is not None:
             self.__logger.debug(f"[{ip}]: camera connection created.")
             self.__logger.debug("[Server]: processing new camera connection...")
             self.__stream_connections[ip] = conn
@@ -82,7 +87,10 @@ class Server:
             is_running = mp.Value(ctypes.c_bool, False)
             log.debug(f"[{ip}]: listening for commands...")
             while True:
-                request = conn.recv(2)
+                try:
+                    request = conn.recv(2)
+                except OSError:
+                    break
                 log.debug(f"[{ip}]: command received: '{request.decode('utf-8')}'")
                 # get Resolution
                 if request == b"gr":
@@ -99,17 +107,21 @@ class Server:
                 # start stream
                 elif request == struct.pack(">?", True):
                     log.debug(f"[{ip}]: requests stream start...")
-                    is_running.value = True
-                    pipe_out, pipe_in = mp.Pipe(False)
-                    self.test = pipe_out
-                    self.__start_stream(is_running, pipe_in, height, width, ip, self.__stream_connections[ip])
-                    conn.send(struct.pack(">?", True))
+                    self.__start_stream(log, is_running, height, width, ip, conn)
 
         t = Thread(target=loop, args=[self.__logger, connection, ip_address, self.__height, self.__width], daemon=True)
         t.start()
         self.__camera_processes[ip_address] = [t]
 
-    def __start_stream(self, is_running, pipe_in, height, width, ip_address, stream_connection):
+    def __start_stream(self, log, is_running, height, width, ip, conn):
+        log.debug(f"[{ip}] starting stream...")
+        is_running.value = True
+        pipe_out, pipe_in = mp.Pipe(False)
+        self.test = pipe_out
+        self.__handle_stream_connection(is_running, pipe_in, height, width, ip, self.__stream_connections[ip])
+        conn.send(struct.pack(">?", True))
+
+    def __handle_stream_connection(self, is_running, pipe_in, height, width, ip_address, stream_connection):
         def loop(log, ip, conn, h, w, is_run, pipe):
             log.debug(f"[{ip}]: stream started.")
             frame_byte_size = h * w * 3
@@ -124,6 +136,35 @@ class Server:
                                           is_running, pipe_in), daemon=True)
         p.start()
         self.__camera_processes[ip_address].append(p)
+
+    def stop_all_streams(self):
+        for key in self.__management_connections:
+            self.__management_connections[key].send(struct.pack(">?", False))
+
+    def restart_stream(self):
+        for key in self.__management_connections:
+            self.__management_connections[key].send(struct.pack(">?", True))
+
+    def quit_all_clients(self):
+        for key in self.__management_connections:
+            self.__management_connections[key].send(b"q")
+            self.__management_connections[key].close()
+            self.__stream_connections[key].close()
+            self.__join_all_processes_threads()
+        self.__management_connections.clear()
+        self.__stream_connections.clear()
+
+    def __join_all_processes_threads(self):
+        self.__logger.debug("joining processes/threads...")
+        for key in self.__camera_processes:
+            for item in self.__camera_processes[key]:
+                self.__logger.debug(f"joining thread: {item}") if isinstance(type(item), type(Thread())) \
+                    else self.__logger.debug(f"joining process: {item}")
+                item.join()
+                self.__logger.debug(f"thread joined: {item}") if isinstance(type(item), type(Thread())) \
+                    else self.__logger.debug(f"process joined: {item}")
+        self.__logger.debug("all threads/processes joined.")
+        self.__camera_processes.clear()
 
 
 if __name__ == '__main__':
