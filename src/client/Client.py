@@ -29,6 +29,7 @@ class Client:
             if config.use_custom_resolution else self.__request_resolution()
         self.__update_server_resolution_if_necessary()
         self.__capture = Capture(self.__resolution)
+        self.__set_server_fps()
         self.__logger.debug("resolution set.")
         self.__logger.debug("Client Class initialized.")
 
@@ -64,6 +65,12 @@ class Client:
             self.__management_connection.send(b"sr")  # set resolution
             self.__management_connection.send(struct.pack(">2H", height, width))
             self.__logger.debug("Send custom resolution to server.")
+
+    def __set_server_fps(self):
+        self.__management_connection.send(b"sf")  # set fps
+        self.__management_connection.send(struct.pack(">B", int(self.__capture.fps)))
+        #self.__management_connection.send(struct.pack(">B", 30))
+        self.__logger.debug("Send fps to server.")
 
     def run(self):
         self.__logger.info("starting client...")

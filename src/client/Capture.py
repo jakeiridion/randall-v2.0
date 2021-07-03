@@ -14,9 +14,16 @@ class Capture:
         self.logger.debug("Initializing Capture Class...")
         self.is_running = mp.Value(ctypes.c_bool, False)
         self.height, self.width = resolution  # frame.shape = (height, width, 3)
+        self.fps = self.__get_camera_fps()
         self.__record_timer = mp.Manager().Value(ctypes.c_wchar_p, "00:00:00:00")
         self.__processes_threads = []
         self.logger.debug("Capture Class initialized.")
+
+    def __get_camera_fps(self):
+        cap = cv2.VideoCapture(config.capture_device)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        cap.release()
+        return fps
 
     def start(self, pipe_in):
         frame_pipe_out, frame_pipe_in = mp.Pipe(False)
