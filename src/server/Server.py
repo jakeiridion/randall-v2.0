@@ -1,6 +1,6 @@
 import sys
-import time
-
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from src.shared.Logger import create_logger
 from Config import config
 import multiprocessing as mp
@@ -9,6 +9,9 @@ import socket
 from threading import Thread
 import struct
 from VideoWriter import VideoWriter
+from VideoEncoder import VideoEncoder
+import subprocess
+from FolderStructure import FolderStructure
 
 
 class Server:
@@ -24,15 +27,18 @@ class Server:
         self.__is_running = mp.Value(ctypes.c_bool, True)
         self.__height = 320
         self.__width = 480
-        self.__ip = "192.168.3.6"
+        self.__ip = "192.168.5.104"
         self.__port = 5050
+        self.__consecutive_ffmpeg_threads = 1
         # Network
         self.__tcp_sock = self.__create_tcp_socket()
+        # Video Encoder
+        self.__to_be_encoded_out, self.__to_be_encoded_in = mp.Pipe(False)
+        self.__start_handling_unencoded_files_thread()
+        VideoEncoder.encode_and_delete_all_unfinished_raw_files(self.__to_be_encoded_in)
         # Start Network listening
         self.__start_handling_new_connections_thread()
         self.__logger.debug("[Server]: Server Class Initialized.")
-        # Delete me
-        self.test = None
 
     def __create_tcp_socket(self):
         self.__logger.debug("[Server]: creating tcp socket...")
@@ -43,6 +49,21 @@ class Server:
         sock.bind((self.__ip, self.__port))
         self.__logger.debug("[Server]: tcp socket created.")
         return sock
+
+    def __start_handling_unencoded_files_thread(self):
+        def loop(is_running, log, consecutive_ffmpeg_threads, pipe):
+            while is_running.value:
+                current_running_ffmpeg_processes = []
+                for _ in range(consecutive_ffmpeg_threads):
+                    ffmpeg_command = pipe.recv()
+                    proc = subprocess.Popen(" ".join(ffmpeg_command), stderr=subprocess.DEVNULL, shell=True)
+                    current_running_ffmpeg_processes.append((proc, ffmpeg_command[-4]))  # file path
+                for proc, file_path in current_running_ffmpeg_processes:
+                    proc.wait()
+                    FolderStructure.rename_file_if_left_unfinished(file_path)
+
+        Thread(target=loop, args=[self.__is_running, self.__logger, self.__consecutive_ffmpeg_threads,
+                                  self.__to_be_encoded_out], daemon=True).start()
 
     def __start_handling_new_connections_thread(self):
         self.__logger.debug("[Server]: listening for connections....")
@@ -108,7 +129,7 @@ class Server:
                 # set fps
                 elif request == b"sf":
                     log.debug(f"[{ip}]: sending fps...")
-                    fps = struct.unpack(">B", conn.recv(struct.calcsize(">B")))[0]
+                    fps = int(struct.unpack(">B", conn.recv(struct.calcsize(">B")))[0])
                 # start stream
                 elif request == struct.pack(">?", True):
                     log.debug(f"[{ip}]: requests stream start...")
@@ -128,7 +149,7 @@ class Server:
         pipe_out, pipe_in = mp.Pipe(False)
         video_writer = VideoWriter((width, height), fps, is_running, ip, pipe_out)
         self.__handle_stream_connection(is_running, pipe_in, height, width, ip, self.__stream_connections[ip])
-        p = video_writer.start_writing_video()
+        p = video_writer.start_writing_video(self.__to_be_encoded_in)
         self.__camera_processes[ip].append(p)
         conn.send(struct.pack(">?", True))
 
