@@ -27,7 +27,7 @@ class Server:
         self.__is_running = mp.Value(ctypes.c_bool, True)
         self.__height = 320
         self.__width = 480
-        self.__ip = "192.168.5.104"
+        self.__ip = "192.168.5.99"
         self.__port = 5050
         self.__consecutive_ffmpeg_threads = 1
         # Network
@@ -35,7 +35,7 @@ class Server:
         # Video Encoder
         self.__to_be_encoded_out, self.__to_be_encoded_in = mp.Pipe(False)
         self.__start_handling_unencoded_files_thread()
-        VideoEncoder.encode_and_delete_all_unfinished_raw_files(self.__to_be_encoded_in)
+        VideoEncoder.encode_and_delete_all_unfinished_raw_files(self.__to_be_encoded_in, self.__logger)
         # Start Network listening
         self.__start_handling_new_connections_thread()
         self.__logger.debug("[Server]: Server Class Initialized.")
@@ -51,16 +51,22 @@ class Server:
         return sock
 
     def __start_handling_unencoded_files_thread(self):
+        self.__logger.debug("[Server]: handling unencoded files...")
+
         def loop(is_running, log, consecutive_ffmpeg_threads, pipe):
             while is_running.value:
                 current_running_ffmpeg_processes = []
                 for _ in range(consecutive_ffmpeg_threads):
                     ffmpeg_command = pipe.recv()
+                    log.debug("[Server]: ffmpeg command received.")
                     proc = subprocess.Popen(" ".join(ffmpeg_command), stderr=subprocess.DEVNULL, shell=True)
+                    log.debug(f"[Server]: ffmpeg process started with {proc.pid} PID.")
                     current_running_ffmpeg_processes.append((proc, ffmpeg_command[-4]))  # file path
                 for proc, file_path in current_running_ffmpeg_processes:
                     proc.wait()
-                    FolderStructure.rename_file_if_left_unfinished(file_path)
+                    log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished.")
+                    FolderStructure.rename_file_if_left_unfinished(file_path, self.__logger)
+            log.debug("[Server]: stopped handling unencoded files.")
 
         Thread(target=loop, args=[self.__is_running, self.__logger, self.__consecutive_ffmpeg_threads,
                                   self.__to_be_encoded_out], daemon=True).start()
