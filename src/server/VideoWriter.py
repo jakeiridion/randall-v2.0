@@ -63,7 +63,7 @@ class VideoWriter:
 
     def __calculate_cut_timer(self):
         current_time = datetime.now().replace(microsecond=0)
-        delta = timedelta(hours=1) + current_time
+        delta = timedelta(minutes=30) + current_time
         delta = delta.replace(minute=0, second=0, microsecond=0)
         return delta - current_time
 
