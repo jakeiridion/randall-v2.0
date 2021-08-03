@@ -40,7 +40,8 @@ class Client:
             result = sock.connect_ex((self.__ip, self.__port))
             if result == 0:
                 sock.setblocking(True)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, config.stream_send_buffer)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 360448)
+                # print(sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF))
                 self.__logger.debug("connection created.")
                 return sock
             sock.close()
@@ -143,7 +144,7 @@ class Client:
         for item in self.__processes_threads:
             self.__logger.debug(f"joining thread: {item}") if isinstance(type(item), type(Thread())) \
                 else self.__logger.debug(f"joining process: {item}")
-            item.join()
+            item.join(timeout=15)
             self.__logger.debug(f"thread joined: {item}") if isinstance(type(item), type(Thread())) \
                 else self.__logger.debug(f"process joined: {item}")
         self.__logger.debug("all threads/processes joined.")
