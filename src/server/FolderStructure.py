@@ -14,7 +14,8 @@ class FolderStructure:
         self.__ip = ip
         self.__camera_path = os.path.join("../../cams", self.__ip)
         if not os.path.isdir("../../cams"):
-            self.__logger.debug(f"[Server]: creating directory ../../cams")  # TODO: change after introducing server config.
+            self.__logger.debug(
+                f"[Server]: creating directory ../../cams")  # TODO: change after introducing server config.
             os.mkdir("../../cams")
         if not os.path.isdir(self.__camera_path):
             self.__logger.debug(f"[{ip}]: creating directory {self.__camera_path}.")
@@ -35,12 +36,18 @@ class FolderStructure:
         return new_path
 
     @staticmethod
-    def rename_file_if_left_unfinished(file_path, log):
-        if "-" not in ntpath.basename(file_path):
-            FolderStructure.__rename_newly_encoded_file(file_path, log)
+    def rename_file_if_not_renamed(file_path, log):
+        if FolderStructure.was_renamed(file_path):
+            FolderStructure.__rename_file(file_path, log)
 
     @staticmethod
-    def __rename_newly_encoded_file(file_path, log):
+    def was_renamed(file_path):
+        if "-" not in ntpath.basename(file_path):
+            return True
+        return False
+
+    @staticmethod
+    def __rename_file(file_path, log):
         log.debug(f"[Server]: creating new name for unfinished file {file_path}...")
         get_video_length_command = [
             "ffprobe",

@@ -1,5 +1,6 @@
 import os
 import struct
+from FolderStructure import FolderStructure
 
 
 class VideoEncoder:
@@ -27,13 +28,16 @@ class VideoEncoder:
         return ffmpeg_command
 
     @staticmethod
-    def encode_and_delete_all_unfinished_raw_files(to_be_encoded_pipe_in, log):
+    def encode_rename_and_delete_all_unfinished_raw_files(to_be_encoded_pipe_in, log):
         raw_files = []
-        log.debug("[Server]: looking for leftover unfinished and unencoded files...")
+        log.debug("[Server]: looking for leftover unfinished or unencoded files...")
         for root, dirs, files in os.walk(os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "cams")):
             for name in files:
-                if os.path.join(root, name).endswith(".raw"):
-                    raw_files.append(os.path.join(root, name))
+                path = os.path.join(root, name)
+                if path.endswith(".raw"):
+                    raw_files.append(path)
+                elif FolderStructure.was_renamed(path):
+                    FolderStructure.rename_file_if_not_renamed(path, log)
 
         for raw_file in raw_files:
             log.debug(f"[Server]: unpacking metadata from {raw_file}")
