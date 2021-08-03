@@ -18,16 +18,17 @@ class Server:
     def __init__(self):
         self.__logger = create_logger(__name__, config.debug_mode, "server.log")
         self.__logger.debug("[Server]: Initializing Server Class...")
-        # Processes
+        # Client Connections
         self.__management_connections = {}
         self.__stream_connections = {}
+        # Processes
         self.__camera_processes = {}
         self.__server_processes_threads = []
         # Variables
         self.__is_running = mp.Value(ctypes.c_bool, True)
         self.__height = 320
         self.__width = 480
-        self.__ip = "192.168.5.99"
+        self.__ip = "127.0.0.1"
         self.__port = 5050
         self.__consecutive_ffmpeg_threads = 1
         # Network
@@ -35,7 +36,7 @@ class Server:
         # Video Encoder
         self.__to_be_encoded_out, self.__to_be_encoded_in = mp.Pipe(False)
         self.__start_handling_unencoded_files_thread()
-        VideoEncoder.encode_and_delete_all_unfinished_raw_files(self.__to_be_encoded_in, self.__logger)
+        VideoEncoder.encode_rename_and_delete_all_unfinished_raw_files(self.__to_be_encoded_in, self.__logger)
         # Start Network listening
         self.__start_handling_new_connections_thread()
         self.__logger.debug("[Server]: Server Class Initialized.")
@@ -45,7 +46,8 @@ class Server:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
         sock.setblocking(True)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 7456540)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 360448)
+        # print(sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF))
         sock.bind((self.__ip, self.__port))
         self.__logger.debug("[Server]: tcp socket created.")
         return sock
@@ -65,7 +67,7 @@ class Server:
                 for proc, file_path in current_running_ffmpeg_processes:
                     proc.wait()
                     log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished.")
-                    FolderStructure.rename_file_if_left_unfinished(file_path, self.__logger)
+                    FolderStructure.rename_file_if_not_renamed(file_path, self.__logger)
             log.debug("[Server]: stopped handling unencoded files.")
 
         Thread(target=loop, args=[self.__is_running, self.__logger, self.__consecutive_ffmpeg_threads,
@@ -142,7 +144,7 @@ class Server:
                     self.__start_stream(log, is_running, height, width, ip, conn, fps)
                 # client crashed
                 elif request == b"":
-                    self.__handle_server_crash(is_running, ip)
+                    self.__handle_client_crash(is_running, ip)
                     break
             log.debug(f"[{ip}]: stopped listening for commands.")
 
@@ -175,38 +177,42 @@ class Server:
         p.start()
         self.__camera_processes[ip_address] = [p]
 
-    def __handle_server_crash(self, is_running, ip):
+    def __handle_client_crash(self, is_running, ip):
         self.__logger.warning("Client crashed!")
         self.__logger.info("Handling client crash...")
         is_running.value = False
-        self.__join_all_processes_threads(ip)
+        self.__join_all_client_processes(ip)
         self.__close_client_connections(ip)
 
-    def __join_all_processes_threads(self, key):
-        self.__logger.debug("joining processes/threads...")
-        for item in self.__camera_processes[key]:
-            self.__logger.debug(f"joining thread: {item}") if isinstance(type(item), type(Thread())) \
-                else self.__logger.debug(f"joining process: {item}")
-            item.join()
-            self.__logger.debug(f"thread joined: {item}") if isinstance(type(item), type(Thread())) \
-                else self.__logger.debug(f"process joined: {item}")
-        self.__logger.debug("all threads/processes joined.")
-        del self.__camera_processes[key]
+    def __join_all_client_processes(self, ip):
+        self.__logger.debug(f"[Server]: joining all processes of client {ip}...")
+        for item in self.__camera_processes[ip]:
+            self.__logger.debug(f"[Server]: joining process: {item} of client {ip}")
+            item.join(timeout=15)
+            self.__logger.debug(f"[Server]: process: {item} of client {ip} joined.")
+        self.__logger.debug(f"[Server]: all processes of client {ip} joined.")
+        del self.__camera_processes[ip]
 
     def __close_client_connections(self, ip):
         self.__logger.debug(f"[{ip}]: closing socket connections...")
         self.__management_connections[ip].close()
-        del self.__management_connections[ip]
         self.__logger.debug(f"[{ip}]: management connection closed.")
         self.__stream_connections[ip].close()
-        del self.__stream_connections[ip]
         self.__logger.debug(f"[{ip}]: stream connection closed.")
+        self.__clear_client_from_connections_dict(ip)
         self.__logger.debug(f"[{ip}]: socket connections closed.")
+
+    def __clear_client_from_connections_dict(self, ip):
+        self.__logger.debug(f"[{ip}]: deleting client connections from server memory...")
+        del self.__management_connections[ip]
+        self.__logger.debug(f"[{ip}]: management connection deleted.")
+        del self.__stream_connections[ip]
+        self.__logger.debug(f"[{ip}]: stream connection deleted.")
 
     def stop_all_streams(self):
         for key in self.__management_connections:
             self.__management_connections[key].send(struct.pack(">?", False))
-            self.__join_all_processes_threads(key)
+            self.__join_all_client_processes(key)
 
     def restart_stream(self):
         for key in self.__management_connections:
