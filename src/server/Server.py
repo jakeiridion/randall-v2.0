@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(sys.path[0])))
 from src.shared.Logger import create_logger
 from Config import config
 import multiprocessing as mp
