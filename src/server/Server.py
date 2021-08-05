@@ -16,7 +16,7 @@ from FolderStructure import FolderStructure
 
 class Server:
     def __init__(self):
-        self.__logger = create_logger(__name__, config.debug_mode, "server.log")
+        self.__logger = create_logger(__name__, config.DebugMode, "server.log")
         self.__logger.debug("[Server]: Initializing Server Class...")
         # Client Connections
         self.__management_connections = {}
@@ -26,11 +26,11 @@ class Server:
         self.__server_processes_threads = []
         # Variables
         self.__is_running = mp.Value(ctypes.c_bool, True)
-        self.__height = 320
-        self.__width = 480
-        self.__ip = "127.0.0.1"
-        self.__port = 5050
-        self.__consecutive_ffmpeg_threads = 1
+        self.__height = config.DefaultHeight
+        self.__width = config.DefaultWidth
+        self.__ip = config.ServerIP
+        self.__port = config.ServerPort
+        self.__consecutive_ffmpeg_threads = config.ConsecutiveFFMPEGThreads
         # Network
         self.__tcp_sock = self.__create_tcp_socket()
         # Video Encoder
@@ -61,9 +61,9 @@ class Server:
                 for _ in range(consecutive_ffmpeg_threads):
                     ffmpeg_command = pipe.recv()
                     log.debug("[Server]: ffmpeg command received.")
-                    proc = subprocess.Popen(" ".join(ffmpeg_command), stderr=subprocess.DEVNULL, shell=True)
+                    proc = subprocess.Popen(ffmpeg_command, stderr=subprocess.DEVNULL, shell=True)
                     log.debug(f"[Server]: ffmpeg process started with {proc.pid} PID.")
-                    current_running_ffmpeg_processes.append((proc, ffmpeg_command[-4]))  # file path
+                    current_running_ffmpeg_processes.append((proc, ffmpeg_command.split(" ")[-4]))  # file path
                 for proc, file_path in current_running_ffmpeg_processes:
                     proc.wait()
                     log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished.")

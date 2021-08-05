@@ -1,6 +1,6 @@
 from src.shared.Logger import create_logger
+from src.shared.ConfigVerifier import ConfigVerifier
 import configparser
-import socket
 import cv2
 import sys
 import os
@@ -9,12 +9,11 @@ import os
 class Config:
     def __init__(self):
         client_config = configparser.ConfigParser()
-        conf_path = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "conf"),
-                                 "client.ini")
+        conf_path = os.path.join(os.path.join(os.path.dirname(os.path.dirname(sys.path[0])), "conf"), "client.ini")
         client_config.read(conf_path)
-        # Default Variables
-        self.debug_mode = client_config["DEVELOPER"].getboolean("DebugMode")
-        self.__logger = create_logger(__name__, self.debug_mode, "client.log")
+        # Developer Variables
+        self.DebugMode = client_config["DEVELOPER"].getboolean("DebugMode")
+        self.__logger = create_logger(__name__, self.DebugMode, "client.log")
         self.__logger.info("Loading Configuration file...")
         # Network Variables
         self.__logger.debug("Loading Network settings...")
@@ -33,6 +32,7 @@ class Config:
         self.__logger.debug("Camera settings loaded.")
         # Check Values
         self.__logger.debug("verifying settings...")
+        self.__config_verifier = ConfigVerifier(self.__logger)
         self.__check_network_settings()
         self.__check_video_capture_settings()
         self.__logger.debug("settings verified.")
@@ -45,17 +45,8 @@ class Config:
             self.__logger.debug("use custom resolution: disabled")
 
     def __check_network_settings(self):
-        self.__logger.debug("verifying ServerIP.")
-        try:
-            socket.inet_aton(self.ip)
-        except socket.error:
-            self.__logger.exception("Bad IP Address detected in config.")
-            raise Exception("BAD IP ADDRESS")
-
-        self.__logger.debug("verifying ServerPORT.")
-        if self.port > 65535 or self.port < 1:
-            self.__logger.error("Bad Port detected in config. %s", "Allowed ports: 1 < port < 65535")
-            raise Exception("BAD PORT")
+        self.__config_verifier.check_ip_address(self.ip)
+        self.__config_verifier.check_port(self.port)
 
         self.__logger.debug("verifying WaitAfterFrame.")
         if self.wait_after_frame < 0:
@@ -72,15 +63,8 @@ class Config:
         self.__check_capture_device()
 
         if self.use_custom_resolution:
-            self.__logger.debug("verifying CustomFrameHeight.")
-            if self.custom_frame_height < 0:
-                self.__logger.error("Bad frame height. %s", "Value can not be negative.")
-                raise Exception("BAD FRAME HEIGHT")
-
-            self.__logger.debug("verifying CustomFrameWidth.")
-            if self.custom_frame_width < 0:
-                self.__logger.error("Bad frame width. %s", "Value can not be negative.")
-                raise Exception("BAD FRAME WIDTH")
+            self.__config_verifier.check_frame_height(self.custom_frame_height)
+            self.__config_verifier.check_frame_width(self.custom_frame_width)
 
     def __check_capture_device(self):
         if self.capture_device < 0:

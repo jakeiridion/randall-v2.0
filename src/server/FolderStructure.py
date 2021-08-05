@@ -9,22 +9,22 @@ from Config import config
 
 class FolderStructure:
     def __init__(self, ip):
-        self.__logger = create_logger(__name__, config.debug_mode, "server.log")
+        self.__logger = create_logger(__name__, config.DebugMode, "server.log")
         self.__logger.debug(f"[{ip}]: Initializing FolderStructure Class...")
         self.__ip = ip
-        self.__camera_path = os.path.join("../../cams", self.__ip)
-        if not os.path.isdir("../../cams"):
-            self.__logger.debug(
-                f"[Server]: creating directory ../../cams")  # TODO: change after introducing server config.
-            os.mkdir("../../cams")
-        if not os.path.isdir(self.__camera_path):
-            self.__logger.debug(f"[{ip}]: creating directory {self.__camera_path}.")
-            os.mkdir(self.__camera_path)
+        self.__cams_dir_path = os.path.join(config.StoragePath, "cams")
+        self.__ip_camera_path = os.path.join(self.__cams_dir_path, self.__ip)
+        if not os.path.isdir(self.__cams_dir_path):
+            self.__logger.debug(f"[Server]: creating directory {self.__cams_dir_path}")
+            os.mkdir(self.__cams_dir_path)
+        if not os.path.isdir(self.__ip_camera_path):
+            self.__logger.debug(f"[{ip}]: creating directory {self.__ip_camera_path}.")
+            os.mkdir(self.__ip_camera_path)
         self.__logger.debug(f"[{ip}]: FolderStructure Class initialized.")
 
     def get_output_path(self):
         folder_date_name = datetime.now().strftime('%Y-%m-%d')
-        folder_path = os.path.join(self.__camera_path, folder_date_name)
+        folder_path = os.path.join(self.__ip_camera_path, folder_date_name)
         if not os.path.isdir(folder_path):
             self.__logger.debug(f"[{self.__ip}]: creating directory {folder_path}.")
             os.mkdir(folder_path)
