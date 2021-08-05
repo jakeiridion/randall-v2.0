@@ -17,18 +17,18 @@ class Config:
         self.__logger.info("Loading Configuration file...")
         # Network Variables
         self.__logger.debug("Loading Network settings...")
-        self.ip = client_config["Network"]["ServerIP"]
-        self.port = client_config["Network"].getint("ServerPORT")
-        self.wait_after_frame = client_config["Network"].getfloat("WaitAfterFrame")
-        self.retry_after_server_crash = client_config["Network"].getint("RetryAfterServerCrash")
+        self.ServerIP = client_config["Network"]["ServerIP"]
+        self.ServerPort = client_config["Network"].getint("ServerPort")
+        self.WaitAfterFrame = client_config["Network"].getfloat("WaitAfterFrame")
+        self.RetryAfterServerCrash = client_config["Network"].getint("RetryAfterServerCrash")
         self.__logger.debug("Network settings loaded.")
         # Camera Variables
         self.__logger.debug("Loading Camera settings...")
-        self.capture_device = client_config["VideoCapture"].getint("CaptureDevice")
-        self.use_custom_resolution = client_config["VideoCapture"].getboolean("UseCustomResolution")
+        self.CaptureDevice = client_config["VideoCapture"].getint("CaptureDevice")
+        self.UseCustomResolution = client_config["VideoCapture"].getboolean("UseCustomResolution")
         self.__log_custom_resolution_mode()
-        self.custom_frame_height = client_config["VideoCapture"].getint("CustomFrameHeight")
-        self.custom_frame_width = client_config["VideoCapture"].getint("CustomFrameWidth")
+        self.CustomFrameHeight = client_config["VideoCapture"].getint("CustomFrameHeight")
+        self.CustomFrameWidth = client_config["VideoCapture"].getint("CustomFrameWidth")
         self.__logger.debug("Camera settings loaded.")
         # Check Values
         self.__logger.debug("verifying settings...")
@@ -39,39 +39,39 @@ class Config:
         self.__logger.info("Configuration file loaded.")
 
     def __log_custom_resolution_mode(self):
-        if self.use_custom_resolution:
+        if self.UseCustomResolution:
             self.__logger.debug("use custom resolution: enabled")
         else:
             self.__logger.debug("use custom resolution: disabled")
 
     def __check_network_settings(self):
-        self.__config_verifier.check_ip_address(self.ip)
-        self.__config_verifier.check_port(self.port)
+        self.__config_verifier.check_ip_address(self.ServerIP)
+        self.__config_verifier.check_port(self.ServerPort)
 
         self.__logger.debug("verifying WaitAfterFrame.")
-        if self.wait_after_frame < 0:
-            self.__logger.error("Bad wait value in config. %s", "Value can not be negative.")
+        if self.WaitAfterFrame < 0:
+            self.__logger.error("Bad WaitAfterFrame value in config. %s", "Value can not be negative.")
             raise Exception("BAD WAIT VALUE")
 
         self.__logger.debug("verifying RetryAfterCrash")
-        if self.retry_after_server_crash < 0:
-            self.__logger.error("Bad crash wait value in config. %s", "Value can not be negative.")
+        if self.RetryAfterServerCrash < 0:
+            self.__logger.error("Bad RetryAfterCrash value in config. %s", "Value can not be negative.")
             raise Exception("BAD CRASH WAIT VALUE")
 
     def __check_video_capture_settings(self):
         self.__logger.debug("verifying CaptureDevice.")
         self.__check_capture_device()
 
-        if self.use_custom_resolution:
-            self.__config_verifier.check_frame_height(self.custom_frame_height)
-            self.__config_verifier.check_frame_width(self.custom_frame_width)
+        if self.UseCustomResolution:
+            self.__config_verifier.check_frame_height(self.CustomFrameHeight)
+            self.__config_verifier.check_frame_width(self.CustomFrameWidth)
 
     def __check_capture_device(self):
-        if self.capture_device < 0:
-            self.__logger.error("Bad capture device value. %s", "Value can not be negative.")
+        if self.CaptureDevice < 0:
+            self.__logger.error("Bad CaptureDevice value. %s", "Value can not be negative.")
             raise Exception("BAD CAPTURE DEVICE")
 
-        cap = cv2.VideoCapture(self.capture_device)
+        cap = cv2.VideoCapture(self.CaptureDevice)
         if cap.isOpened():
             cap.release()
         else:

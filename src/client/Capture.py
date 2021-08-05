@@ -10,7 +10,7 @@ import time
 
 class Capture:
     def __init__(self, resolution):
-        self.logger = create_logger(__name__, config.debug_mode, "client.log")
+        self.logger = create_logger(__name__, config.DebugMode, "client.log")
         self.logger.debug("Initializing Capture Class...")
         self.is_running = mp.Value(ctypes.c_bool, False)
         self.height, self.width = resolution  # frame.shape = (height, width, 3)
@@ -20,7 +20,7 @@ class Capture:
         self.logger.debug("Capture Class initialized.")
 
     def __get_camera_fps(self):
-        cap = cv2.VideoCapture(config.capture_device)
+        cap = cv2.VideoCapture(config.CaptureDevice)
         fps = cap.get(cv2.CAP_PROP_FPS)
         cap.release()
         return fps
@@ -45,7 +45,7 @@ class Capture:
             log.debug("Video Capture stopped.")
 
         t = Thread(target=loop,
-                   args=[self.logger, self.is_running, config.capture_device, self.width, self.height, pipe_in],
+                   args=[self.logger, self.is_running, config.CaptureDevice, self.width, self.height, pipe_in],
                    daemon=True)
         t.start()
         self.__processes_threads.append(t)

@@ -14,19 +14,19 @@ from threading import Thread
 
 class Client:
     def __init__(self):
-        self.__logger = create_logger(__name__, config.debug_mode, "client.log")
+        self.__logger = create_logger(__name__, config.DebugMode, "client.log")
         self.__logger.debug("Initializing Client Class...")
         self.__processes_threads = []
         # Network
-        self.__ip = config.ip
-        self.__port = config.port
+        self.__ip = config.ServerIP
+        self.__port = config.ServerPort
         self.__server_crashed = False
         self.__management_connection = self.__create_connection()
         self.__stream_connection = self.__create_connection()
         self.__initialize_connections()
         # Camera
-        self.__resolution = (config.custom_frame_height, config.custom_frame_width) \
-            if config.use_custom_resolution else self.__request_resolution()
+        self.__resolution = (config.CustomFrameHeight, config.CustomFrameWidth) \
+            if config.UseCustomResolution else self.__request_resolution()
         self.__update_server_resolution_if_necessary()
         self.__capture = Capture(self.__resolution)
         self.__set_server_fps()
@@ -61,7 +61,7 @@ class Client:
         return resolution
 
     def __update_server_resolution_if_necessary(self):
-        if config.use_custom_resolution:
+        if config.UseCustomResolution:
             height, width = self.__resolution
             self.__management_connection.send(b"sr")  # set resolution
             self.__management_connection.send(struct.pack(">2H", height, width))
@@ -70,7 +70,6 @@ class Client:
     def __set_server_fps(self):
         self.__management_connection.send(b"sf")  # set fps
         self.__management_connection.send(struct.pack(">B", int(self.__capture.fps)))
-        #self.__management_connection.send(struct.pack(">B", 30))
         self.__logger.debug("Send fps to server.")
 
     def run(self):
@@ -129,7 +128,7 @@ class Client:
             log.info("stream stopped.")
 
         p = mp.Process(target=loop, args=(self.__logger, self.__capture.is_running, pipe_out, self.__stream_connection,
-                                          config.wait_after_frame), daemon=True)
+                                          config.WaitAfterFrame), daemon=True)
         p.start()
         self.__processes_threads.append(p)
 
@@ -163,16 +162,16 @@ class Client:
         self.__logger.info("Handling server crash...")
         self.__stop_stream()
         self.__close_connections()
-        self.__logger.debug(f"RetryAfterServerCrash: {config.retry_after_server_crash}")
-        if config.retry_after_server_crash != 0:
+        self.__logger.debug(f"RetryAfterServerCrash: {config.RetryAfterServerCrash}")
+        if config.RetryAfterServerCrash != 0:
             def signal_handler(signum, frame):
                 signum.__logger.info("Server unreachable.")
                 signum.__logger.info("closing client...")
                 self.__server_crashed = True
 
             signal.signal(signal.SIGALRM, signal_handler)
-            self.__logger.info(f"trying to reach server for {config.retry_after_server_crash} seconds...")
-            signal.alarm(config.retry_after_server_crash)
+            self.__logger.info(f"trying to reach server for {config.RetryAfterServerCrash} seconds...")
+            signal.alarm(config.RetryAfterServerCrash)
             self.__management_connection = self.__create_connection()
             self.__stream_connection = self.__create_connection()
             signal.alarm(0)
