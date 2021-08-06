@@ -63,7 +63,8 @@ class FolderStructure:
         log.debug("[Server]: building new name...")
         video_length = proc.stdout.decode().strip()
         fmt_video_length = datetime.strptime(video_length, "%H:%M:%S.%f")
-        video_name = ntpath.basename(file_path).rstrip(".mp4")
+        # TODO: look for other rstrip/strip errors like this one:
+        video_name = os.path.splitext(ntpath.basename(file_path))[0]
         video_start_time = datetime.strptime(video_name, "%H_%M_%S")
         new_video_name_fmt = timedelta(hours=fmt_video_length.hour, minutes=fmt_video_length.minute,
                                        seconds=fmt_video_length.second) + video_start_time
