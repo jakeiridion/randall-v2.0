@@ -1,7 +1,7 @@
 import os
 import struct
 from FolderStructure import FolderStructure
-from Config import config
+from src.server.Config import config
 
 
 class VideoEncoder:

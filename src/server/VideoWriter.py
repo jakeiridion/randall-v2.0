@@ -1,7 +1,7 @@
 from FolderStructure import FolderStructure
 from VideoEncoder import VideoEncoder
 from src.shared.Logger import create_logger
-from Config import config
+from src.server.Config import config
 import multiprocessing as mp
 from threading import Thread
 import ctypes

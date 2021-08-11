@@ -4,7 +4,7 @@ import subprocess
 import ntpath
 from pathlib import PurePath
 from src.shared.Logger import create_logger
-from Config import config
+from src.server.Config import config
 
 
 class FolderStructure:

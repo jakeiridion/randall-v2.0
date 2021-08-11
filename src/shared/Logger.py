@@ -7,8 +7,8 @@ def __initiate_logger(name, log_path, debug):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     if not logger.handlers:
-        file_handler = RotatingFileHandler(log_path, maxBytes=10_000_000, backupCount=1)
-        file_handler.setLevel(logging.INFO)
+        file_handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=1)
+        file_handler.setLevel(logging.INFO) if not debug else file_handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter("%(asctime)s:%(name)s:%(levelname)s:%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

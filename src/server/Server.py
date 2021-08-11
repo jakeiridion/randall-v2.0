@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(sys.path[0])))
 from src.shared.Logger import create_logger
-from Config import config
+from src.server.Config import config
 import multiprocessing as mp
 import ctypes
 import socket
@@ -12,6 +12,7 @@ from VideoWriter import VideoWriter
 from VideoEncoder import VideoEncoder
 import subprocess
 from FolderStructure import FolderStructure
+from Webserver import Webserver
 
 
 class Server:
@@ -33,6 +34,8 @@ class Server:
         self.__consecutive_ffmpeg_threads = config.ConsecutiveFFMPEGThreads
         # Network
         self.__tcp_sock = self.__create_tcp_socket()
+        # Webserver
+        self.webserver = Webserver.Webserver()
         # Video Encoder
         self.__to_be_encoded_out, self.__to_be_encoded_in = mp.Pipe(False)
         self.__start_handling_unencoded_files_thread()
@@ -156,13 +159,16 @@ class Server:
         is_running.value = True
         pipe_out, pipe_in = mp.Pipe(False)
         video_writer = VideoWriter((width, height), fps, is_running, ip, pipe_out)
-        self.__handle_stream_connection(is_running, pipe_in, height, width, ip, self.__stream_connections[ip])
+        self.webserver.resolutions[ip] = (height, width)
+        self.__handle_stream_connection(is_running, pipe_in, height, width, ip, self.__stream_connections[ip],
+                                        self.webserver.frames)
         p = video_writer.start_writing_video(self.__to_be_encoded_in)
         self.__camera_processes[ip].append(p)
         conn.send(struct.pack(">?", True))
 
-    def __handle_stream_connection(self, is_running, pipe_in, height, width, ip_address, stream_connection):
-        def loop(log, ip, conn, h, w, is_run, pipe):
+    def __handle_stream_connection(self, is_running, pipe_in, height, width, ip_address, stream_connection,
+                                   webserver_frames):
+        def loop(log, ip, conn, h, w, is_run, pipe, ws_frames):
             log.debug(f"[{ip}]: stream started.")
             frame_byte_size = h * w * 3
             while is_run.value:
@@ -170,10 +176,12 @@ class Server:
                 while len(buffer) < frame_byte_size and is_run.value:
                     buffer += conn.recv(frame_byte_size-len(buffer))
                 pipe.send_bytes(buffer)
+                ws_frames[ip] = buffer
             log.debug(f"[{ip}]: stream stopped..")
+            # TODO: handle webserver stream stop.
 
         p = mp.Process(target=loop, args=(self.__logger, ip_address, stream_connection, height, width,
-                                          is_running, pipe_in), daemon=True)
+                                          is_running, pipe_in, webserver_frames), daemon=True)
         p.start()
         self.__camera_processes[ip_address] = [p]
 
@@ -182,7 +190,9 @@ class Server:
         self.__logger.info("Handling client crash...")
         is_running.value = False
         self.__join_all_client_processes(ip)
+        self.webserver.delete_camera(ip)
         self.__close_client_connections(ip)
+        self.__logger.info("Client crash handled.")
 
     def __join_all_client_processes(self, ip):
         self.__logger.debug(f"[Server]: joining all processes of client {ip}...")
@@ -224,5 +234,4 @@ class Server:
 
 if __name__ == '__main__':
     server = Server()
-    while True:
-        pass
+    server.webserver.run_webserver()

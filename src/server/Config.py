@@ -14,6 +14,7 @@ class Config:
         # Developer Variables
         self.DebugMode = server_config["DEVELOPER"].getboolean("DebugMode")
         self.__logger = create_logger(__name__, self.DebugMode, "server.log")
+        self.__logger.info(f"{'-'*25} STARTING RANDALL-V2.0 {'-'*25}")
         self.__logger.info("Loading Configuration file...")
         # Network Variables
         self.__logger.debug("Loading Network settings...")
