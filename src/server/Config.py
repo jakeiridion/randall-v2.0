@@ -25,20 +25,27 @@ class Config:
         self.__logger.debug("Loading Video settings...")
         self.DefaultHeight = server_config["Video"].getint("DefaultHeight")
         self.DefaultWidth = server_config["Video"].getint("DefaultWidth")
-        self.VideoCutTime = server_config["Video"]["VideoCutTime"]
         self.FFMPEGOutputFileOptions = server_config["Video"]["FFMPEGOutputFileOptions"].strip()
+        self.OutputFileExtension = server_config["Video"]["OutputFileExtension"].strip(".")
         self.StoragePath = server_config["Video"]["StoragePath"]
+        self.VideoCutTime = server_config["Video"]["VideoCutTime"]
+        self.ConcatAmount = server_config["Video"].getint("ConcatAmount")
         self.__logger.debug("Video settings loaded.")
         # Process Variables
         self.__logger.debug("Loading Process settings...")
         self.ConsecutiveFFMPEGThreads = server_config["Processes"].getint("ConsecutiveFFMPEGThreads")
         self.__logger.debug("Process settings loaded.")
+        # Webserver
+        self.WebserverHost = server_config["Webserver"]["WebserverHost"]
+        self.WebserverPort = server_config["Webserver"].getint("WebserverPort")
+        self.WebserverTableWidth = server_config["Webserver"].getint("WebserverTableWidth")
         # Check Values
         self.__logger.debug("verifying settings...")
         self.__config_verifier = ConfigVerifier(self.__logger)
         self.__check_network_settings()
         self.__check_video_settings()
         self.__check_process_settings()
+        self.__check_webserver_settings()
         self.__logger.debug("settings verified.")
         self.__logger.info("Configuration file loaded.")
 
@@ -71,11 +78,25 @@ class Config:
             self.__logger.debug("Bad StoragePath value. Directory doesn't exist.")
             raise Exception("BAD STORAGE PATH")
 
+        self.__logger.debug("verifying ConcatAmount.")
+        if self.ConcatAmount < 1:
+            self.__logger.debug("Bad ConcatAmount value. Value can not be negative or 0.")
+            raise Exception("BAD CONCAT AMOUNT")
+
     def __check_process_settings(self):
         self.__logger.debug("verifying ConsecutiveFFMPEGThreads.")
         if self.ConsecutiveFFMPEGThreads <= 0:
             self.__logger.debug("Bad ConsecutiveFFMPEGThreads value. The value cannot be negative or 0.")
             raise Exception("BAD CONSECUTIVE FFMPEG THREADS VALUE")
+
+    def __check_webserver_settings(self):
+        self.__config_verifier.check_ip_address(self.WebserverHost)
+        self.__config_verifier.check_port(self.WebserverPort)
+
+        self.__logger.debug("verifying WebserverTableWidth.")
+        if self.WebserverTableWidth < 1:
+            self.__logger.debug("Bad WebserverTableWidth value. The The value cannot be negative or 0.")
+            raise Exception("BAD WEBSERVER TABLE WIDTH")
 
 
 config = Config()

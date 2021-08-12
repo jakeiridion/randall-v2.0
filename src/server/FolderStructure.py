@@ -5,6 +5,7 @@ import ntpath
 from pathlib import PurePath
 from src.shared.Logger import create_logger
 from src.server.Config import config
+import re
 
 
 class FolderStructure:
@@ -20,6 +21,7 @@ class FolderStructure:
         if not os.path.isdir(self.__ip_camera_path):
             self.__logger.debug(f"[{ip}]: creating directory {self.__ip_camera_path}.")
             os.mkdir(self.__ip_camera_path)
+        self.__remove_temp_files_if_found()
         self.__logger.debug(f"[{ip}]: FolderStructure Class initialized.")
 
     def get_output_path(self):
@@ -37,12 +39,18 @@ class FolderStructure:
 
     @staticmethod
     def rename_file_if_not_renamed(file_path, log):
-        if FolderStructure.was_renamed(file_path):
+        if not FolderStructure.was_renamed(file_path):
             FolderStructure.__rename_file(file_path, log)
 
     @staticmethod
     def was_renamed(file_path):
-        if "-" not in ntpath.basename(file_path):
+        if "-" in ntpath.basename(file_path):
+            return True
+        return False
+
+    @staticmethod
+    def is_temp_file(file_path):
+        if file_path.endswith(".temp"):
             return True
         return False
 
@@ -75,3 +83,28 @@ class FolderStructure:
         new_file_path = os.path.join(*new_file_path)
         log.debug(f"[Server]: renaming file {file_path} to {new_file_path}.")
         os.rename(file_path, new_file_path)
+
+    @staticmethod
+    def get_file_names_from_concat_file(concat_file_paths_from_file):
+        pattern = re.compile(r"'([^']+)'")
+        return sorted([pattern.search(file_path).group(1) for file_path in concat_file_paths_from_file])
+
+    @staticmethod
+    def create_concat_output_file_name(file_paths):
+        pattern = re.compile(r"(?!.*-).+")
+        return pattern.sub(pattern.search(file_paths[-1]).group(0), file_paths[0])
+
+    @staticmethod
+    def delete_files_of_concat_file(file_paths):
+        for file in file_paths:
+            os.remove(file)
+
+    def __remove_temp_files_if_found(self):
+        self.__logger.debug(f"[{self.__ip}]: looking for leftover temporary files.")
+        for root, dirs, files in os.walk(self.__ip_camera_path):
+            for name in files:
+                path = os.path.join(root, name)
+                if FolderStructure.is_temp_file(path):
+                    self.__logger.debug(f"[{self.__ip}]: leftover temporary concat file found: {path}")
+                    os.remove(path)
+                    self.__logger.debug(f"[{self.__ip}]: concat file {path} removed.")

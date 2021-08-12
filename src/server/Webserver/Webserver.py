@@ -16,7 +16,7 @@ class Webserver:
         self.__logger.debug("[Server]: Initializing Webserver Class...")
         self.frames = mp.Manager().dict()
         self.resolutions = mp.Manager().dict()
-        self.__number_of_columns = 2
+        self.__number_of_columns = config.WebserverTableWidth
         self.__logger.debug("[Server]: Webserver Class Initialized.")
 
     def run_webserver(self):
@@ -40,7 +40,7 @@ class Webserver:
 
         # p = mp.Process(target=_app.run, kwargs={"debug": False, "host": "0.0.0.0", "port": 8080})
         # p.start()
-        _app.run(host="0.0.0.0", port=8080, threaded=False, processes=3)
+        _app.run(host=config.WebserverHost, port=config.WebserverPort, threaded=False, processes=3)
 
     def _generate_frame(self, ip):
         height, width = self.resolutions[ip]

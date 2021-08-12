@@ -4,6 +4,7 @@ sys.path.append(os.path.dirname(os.path.dirname(sys.path[0])))
 from src.shared.Logger import create_logger
 from src.server.Config import config
 import multiprocessing as mp
+from queue import PriorityQueue
 import ctypes
 import socket
 from threading import Thread
@@ -38,8 +39,9 @@ class Server:
         self.webserver = Webserver.Webserver()
         # Video Encoder
         self.__to_be_encoded_out, self.__to_be_encoded_in = mp.Pipe(False)
+        self.__encoding_queue = PriorityQueue()
         self.__start_handling_unencoded_files_thread()
-        VideoEncoder.encode_rename_and_delete_all_unfinished_raw_files(self.__to_be_encoded_in, self.__logger)
+        VideoEncoder.encode_rename_and_delete_all_unfinished_raw_files(self.__encoding_queue, self.__logger)
         # Start Network listening
         self.__start_handling_new_connections_thread()
         self.__logger.debug("[Server]: Server Class Initialized.")
@@ -58,23 +60,37 @@ class Server:
     def __start_handling_unencoded_files_thread(self):
         self.__logger.debug("[Server]: handling unencoded files...")
 
-        def loop(is_running, log, consecutive_ffmpeg_threads, pipe):
+        def loop(is_running, log, consecutive_ffmpeg_threads, encoding_queue):
             while is_running.value:
                 current_running_ffmpeg_processes = []
+                priority = 0
                 for _ in range(consecutive_ffmpeg_threads):
-                    ffmpeg_command = pipe.recv()
-                    log.debug("[Server]: ffmpeg command received.")
+                    priority, ffmpeg_command = encoding_queue.get()
+                    log.debug(f"[Server]: ffmpeg command received with priority {priority}.")
                     proc = subprocess.Popen(ffmpeg_command, stderr=subprocess.DEVNULL, shell=True)
                     log.debug(f"[Server]: ffmpeg process started with {proc.pid} PID.")
                     current_running_ffmpeg_processes.append((proc, ffmpeg_command.split(" ")[-4]))  # file path
                 for proc, file_path in current_running_ffmpeg_processes:
                     proc.wait()
-                    log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished.")
+                    log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished with exit code: {proc.returncode}.")
+                    # TODO: only when concat value > 1
+                    if FolderStructure.was_renamed(file_path) and priority == 3:
+                        VideoWriter.add_to_be_concat(file_path, self.__logger)
                     FolderStructure.rename_file_if_not_renamed(file_path, self.__logger)
             log.debug("[Server]: stopped handling unencoded files.")
 
+        Thread(target=self.__pass_encoding_requests_from_pipe_to_priority_queue,
+               args=[self.__is_running, self.__to_be_encoded_out, self.__encoding_queue, self.__logger],
+               daemon=True).start()
+
         Thread(target=loop, args=[self.__is_running, self.__logger, self.__consecutive_ffmpeg_threads,
-                                  self.__to_be_encoded_out], daemon=True).start()
+                                  self.__encoding_queue], daemon=True).start()
+
+    def __pass_encoding_requests_from_pipe_to_priority_queue(self, is_running, pipe_out, encoding_queue, log):
+        while is_running.value:
+            output = pipe_out.recv()
+            log.debug("[Server]: passing output from pipe to queue.")
+            encoding_queue.put(output)
 
     def __start_handling_new_connections_thread(self):
         self.__logger.debug("[Server]: listening for connections....")

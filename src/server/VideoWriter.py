@@ -53,7 +53,7 @@ class VideoWriter:
             log.debug(f"[{ip}]: renamed {output_path} to {new_output_path}.")
             log.debug(f"[{ip}]: queueing {new_output_path} to be encoded.")
             encoding_pipe_in.send(
-                VideoEncoder.get_ffmpeg_command(new_output_path, self.__width, self.__height, self.__fps))
+                (3, VideoEncoder.get_ffmpeg_command(new_output_path, self.__width, self.__height, self.__fps)))
 
     def __cut_timer(self, cut_bool, is_running):
         while is_running.value:
@@ -71,3 +71,30 @@ class VideoWriter:
         os.setxattr(file_path, "user.width", struct.pack(">H", self.__width))
         os.setxattr(file_path, "user.height", struct.pack(">H", self.__height))
         os.setxattr(file_path, "user.fps", struct.pack(">H", self.__fps))
+
+    # TODO: seperate this:
+    @staticmethod
+    def add_to_be_concat(file_path, log):
+        # TODO: add to config
+        concat_file_path = os.path.join(os.path.dirname(file_path), "to_be_concat.temp")
+        with open(concat_file_path, "a") as concat_file:
+            log.debug(f"[Server]: adding {file_path} to concat file: {concat_file_path}.")
+            concat_file.write(f"file '{file_path}'\n")
+        with open(concat_file_path, "r") as concat_file:
+            lines = sorted(concat_file.readlines())
+        if len(lines) == config.ConcatAmount:
+            concat_file_paths = FolderStructure.get_file_names_from_concat_file(lines)
+            log.debug(f"[Server]: concat amount reached.")
+            log.debug("[Server]: creating new output name...")
+            output_name = FolderStructure.create_concat_output_file_name(concat_file_paths)
+            log.debug(f"[Server]: new output name created: {output_name}")
+            log.debug("[Server]: joining video files...")
+            rc = VideoEncoder.concat_mp4s(concat_file_path, output_name, log)
+            log.debug(f"[Server]: Concat Process complete with exit code {rc}")
+            if rc == 0:
+                os.remove(concat_file_path)
+                log.debug("[Server]: Removing old files...")
+                log.debug("[Server]: concat file deleted.")
+                FolderStructure.delete_files_of_concat_file(concat_file_paths)
+                log.debug("[Server]: Video files deleted.")
+                log.debug("[Server]: Old files removed.")
