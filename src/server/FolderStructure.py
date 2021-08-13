@@ -66,23 +66,27 @@ class FolderStructure:
             file_path
         ]
         log.debug("[Server]: starting ffprobe process...")
-        proc = subprocess.run(get_video_length_command, stdout=subprocess.PIPE)
-        log.debug("[Server]: ffprobe process finished.")
-        log.debug("[Server]: building new name...")
-        video_length = proc.stdout.decode().strip()
-        fmt_video_length = datetime.strptime(video_length, "%H:%M:%S.%f")
-        # TODO: look for other rstrip/strip errors like this one:
-        video_name = os.path.splitext(ntpath.basename(file_path))[0]
-        video_start_time = datetime.strptime(video_name, "%H_%M_%S")
-        new_video_name_fmt = timedelta(hours=fmt_video_length.hour, minutes=fmt_video_length.minute,
-                                       seconds=fmt_video_length.second) + video_start_time
-        new_video_name = video_name + datetime.strftime(new_video_name_fmt, "-%H_%M_%S.mp4")
-        pure_path = PurePath(file_path)
-        new_file_path = list(pure_path.parts)
-        new_file_path[-1] = new_video_name
-        new_file_path = os.path.join(*new_file_path)
-        log.debug(f"[Server]: renaming file {file_path} to {new_file_path}.")
-        os.rename(file_path, new_file_path)
+        proc = subprocess.run(get_video_length_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        rc = proc.returncode
+        log.debug(f"[Server]: ffprobe process finished with exit code {rc}.")
+        if rc == 0:
+            log.debug("[Server]: building new name...")
+            video_length = proc.stdout.decode().strip()
+            fmt_video_length = datetime.strptime(video_length, "%H:%M:%S.%f")
+            # TODO: look for other rstrip/strip errors like this one:
+            video_name = os.path.splitext(ntpath.basename(file_path))[0]
+            video_start_time = datetime.strptime(video_name, "%H_%M_%S")
+            new_video_name_fmt = timedelta(hours=fmt_video_length.hour, minutes=fmt_video_length.minute,
+                                           seconds=fmt_video_length.second) + video_start_time
+            new_video_name = video_name + datetime.strftime(new_video_name_fmt, "-%H_%M_%S.mp4")
+            pure_path = PurePath(file_path)
+            new_file_path = list(pure_path.parts)
+            new_file_path[-1] = new_video_name
+            new_file_path = os.path.join(*new_file_path)
+            log.debug(f"[Server]: renaming file {file_path} to {new_file_path}.")
+            os.rename(file_path, new_file_path)
+        else:
+            log.error(proc.stderr)
 
     @staticmethod
     def get_file_names_from_concat_file(concat_file_paths_from_file):

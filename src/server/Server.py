@@ -14,6 +14,7 @@ from VideoEncoder import VideoEncoder
 import subprocess
 from FolderStructure import FolderStructure
 from Webserver import Webserver
+import re
 
 
 class Server:
@@ -67,16 +68,21 @@ class Server:
                 for _ in range(consecutive_ffmpeg_threads):
                     priority, ffmpeg_command = encoding_queue.get()
                     log.debug(f"[Server]: ffmpeg command received with priority {priority}.")
-                    proc = subprocess.Popen(ffmpeg_command, stderr=subprocess.DEVNULL, shell=True)
+                    proc = subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
                     log.debug(f"[Server]: ffmpeg process started with {proc.pid} PID.")
-                    current_running_ffmpeg_processes.append((proc, ffmpeg_command.split(" ")[-4]))  # file path
+                    current_running_ffmpeg_processes.append((proc, ffmpeg_command[-1]))  # file path
                 for proc, file_path in current_running_ffmpeg_processes:
                     proc.wait()
                     log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished with exit code: {proc.returncode}.")
                     # TODO: only when concat value > 1
-                    if FolderStructure.was_renamed(file_path) and priority == 3:
-                        VideoWriter.add_to_be_concat(file_path, self.__logger)
-                    FolderStructure.rename_file_if_not_renamed(file_path, self.__logger)
+                    if proc.returncode == 0:
+                        os.remove(re.sub(rf"{config.OutputFileExtension}$", ".raw", file_path))
+                        if FolderStructure.was_renamed(file_path) and priority == 3:
+                            VideoWriter.add_to_be_concat(file_path, self.__logger)
+                        FolderStructure.rename_file_if_not_renamed(file_path, self.__logger)
+                    else:
+                        log.error(proc.stderr)
+                        log.error(proc.stdout)
             log.debug("[Server]: stopped handling unencoded files.")
 
         Thread(target=self.__pass_encoding_requests_from_pipe_to_priority_queue,

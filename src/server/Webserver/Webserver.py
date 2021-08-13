@@ -55,6 +55,7 @@ class Webserver:
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
         self.__logger.debug(f"[{ip}]: Webserver stopped processing frames.")
 
+    # TODO: yield only current log entries.
     def _generate_log(self):
         log_path = os.path.join(sys.path[-1], "logs")
         for server_log in reversed(sorted([file for file in os.listdir(log_path) if "server" in file])):

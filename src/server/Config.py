@@ -26,7 +26,7 @@ class Config:
         self.DefaultHeight = server_config["Video"].getint("DefaultHeight")
         self.DefaultWidth = server_config["Video"].getint("DefaultWidth")
         self.FFMPEGOutputFileOptions = server_config["Video"]["FFMPEGOutputFileOptions"].strip()
-        self.OutputFileExtension = server_config["Video"]["OutputFileExtension"].strip(".")
+        self.OutputFileExtension = server_config["Video"]["OutputFileExtension"]
         self.StoragePath = server_config["Video"]["StoragePath"]
         self.VideoCutTime = server_config["Video"]["VideoCutTime"]
         self.ConcatAmount = server_config["Video"].getint("ConcatAmount")

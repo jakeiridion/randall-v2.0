@@ -10,18 +10,17 @@ class VideoEncoder:
     @staticmethod
     def get_ffmpeg_command(input_path, width, height, fps):
         final_output_path = os.path.join(os.path.dirname(input_path), os.path.splitext(ntpath.basename(input_path))[0] +
-                                         f".{config.OutputFileExtension}")
-        ffmpeg_command = f"ffmpeg " \
-                         f"-y " \
-                         f"-f rawvideo " \
-                         f"-vcodec rawvideo " \
-                         f"-video_size {width}x{height} " \
-                         f"-pixel_format bgr24 " \
-                         f"-framerate {str(fps)} " \
-                         f"-i {input_path} " \
-                         f"{config.FFMPEGOutputFileOptions} " \
-                         f"{final_output_path} " \
-                         f"&& rm {input_path}"
+                                         config.OutputFileExtension)
+        ffmpeg_command = ["ffmpeg",
+                          "-y",
+                          "-f", "rawvideo",
+                          "-vcodec", "rawvideo",
+                          "-video_size", f"{width}x{height}",
+                          "-pixel_format", "bgr24",
+                          "-framerate", str(fps),
+                          "-i", input_path]
+        ffmpeg_command += config.FFMPEGOutputFileOptions.split(" ")
+        ffmpeg_command.append(final_output_path)
         return ffmpeg_command
 
     @staticmethod
