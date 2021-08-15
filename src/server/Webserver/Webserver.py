@@ -7,6 +7,7 @@ from src.shared.Logger import create_logger
 from src.server.Config import config
 import sys
 import os
+from file_read_backwards import FileReadBackwards
 
 
 # TODO:add flask logging to filehandler
@@ -35,12 +36,12 @@ class Webserver:
 
         @_app.route("/")
         def _index():
-            return render_template("index.html", camera_ips=list(self.frames.keys()), noc=self.__number_of_columns,
+            return render_template("index.html", camera_ips=sorted(list(self.frames.keys())), noc=self.__number_of_columns,
                                    nor=self.__calculate_row_number(self.__number_of_columns, len(self.frames)))
 
         # p = mp.Process(target=_app.run, kwargs={"debug": False, "host": "0.0.0.0", "port": 8080})
         # p.start()
-        _app.run(host=config.WebserverHost, port=config.WebserverPort, threaded=False, processes=3)
+        _app.run(host=config.WebserverHost, port=config.WebserverPort, threaded=True)
 
     def _generate_frame(self, ip):
         height, width = self.resolutions[ip]
@@ -58,10 +59,11 @@ class Webserver:
     # TODO: yield only current log entries.
     def _generate_log(self):
         log_path = os.path.join(sys.path[-1], "logs")
-        for server_log in reversed(sorted([file for file in os.listdir(log_path) if "server" in file])):
-            with open(os.path.join(log_path, server_log), "rb") as file:
-                for line in reversed(file.readlines()):
-                    yield line
+        with FileReadBackwards(os.path.join(log_path, "server.log"), encoding="utf-8") as log_file:
+            for line in log_file:
+                yield (line.strip() + "\n").encode()
+                if "STARTING RANDALL-V2.0" in line:
+                    break
 
     def __calculate_row_number(self, columns, cams, x=0):
         if columns >= cams:
