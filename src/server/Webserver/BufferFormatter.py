@@ -1,11 +1,9 @@
-import cv2
 import numpy as np
+import simplejpeg
 
 
-# TODO: try simplejpeg for faster encoding
 def encode_frame_to_bytes(frame):
-    ret, buffer = cv2.imencode(".jpg", frame)
-    return buffer.tobytes()
+    return simplejpeg.encode_jpeg(frame, colorspace="BGR")
 
 
 def reshape_np_array(buffer, height, width):
