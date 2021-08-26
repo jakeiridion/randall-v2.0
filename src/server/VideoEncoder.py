@@ -1,6 +1,4 @@
 import os
-import struct
-from FolderStructure import FolderStructure
 from src.server.Config import config
 import ntpath
 import subprocess
@@ -24,34 +22,7 @@ class VideoEncoder:
         return ffmpeg_command
 
     @staticmethod
-    def encode_rename_and_delete_all_unfinished_raw_files(encoding_queue, log):
-        raw_files = []
-        to_be_renamed = []
-        log.debug("[Server]: looking for leftover unfinished or unencoded files...")
-        for root, dirs, files in os.walk(os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "cams")):
-            for name in files:
-                path = os.path.join(root, name)
-                if path.endswith(".raw"):
-                    log.debug(f"[Server]: leftover raw file found: {path}")
-                    raw_files.append(path)
-                elif not FolderStructure.was_renamed(path) and not FolderStructure.is_temp_file(path):
-                    log.debug(f"[Server]: not renamed video file found: {path}")
-                    to_be_renamed.append(path)
-
-        for raw_file in raw_files:
-            log.debug(f"[Server]: unpacking metadata from {raw_file}")
-            width, height, fps = tuple(struct.unpack(">H", os.getxattr(raw_file, attr))[0]
-                                       for attr in os.listxattr(raw_file))
-            log.debug(f"[Server]: sending {raw_file} to be encoded.")
-            encoding_queue.put((2, VideoEncoder.get_ffmpeg_command(raw_file, width, height, fps)))
-
-        for unnamed_file_path in to_be_renamed:
-            if unnamed_file_path.replace(".mp4", ".raw") not in raw_files:
-                FolderStructure.rename_file_if_not_renamed(unnamed_file_path, log)
-        log.debug("[Server]: handled unfinished files.")
-
-    @staticmethod
-    def concat_mp4s(concat_file_path, output_path, log):
+    def concat_video_files(concat_file_path, output_path, log):
         command = ["sudo", "ffmpeg",
                    "-f", "concat",
                    "-safe", "0",
@@ -60,6 +31,25 @@ class VideoEncoder:
                    output_path]
         proc = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         rc = proc.returncode
+        log.debug(f"[Server]: Concat Process complete with exit code {rc}")
         if rc != 0:
             log.error(proc.stderr)
         return rc
+
+    @staticmethod
+    def get_video_length(file_path, log):
+        get_video_length_command = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-sexagesimal",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            file_path
+        ]
+        log.debug("[Server]: starting ffprobe process...")
+        proc = subprocess.run(get_video_length_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        rc = proc.returncode
+        log.debug(f"[Server]: ffprobe process finished with exit code {rc}.")
+        if rc != 0:
+            log.error(proc.stderr)
+        return proc

@@ -10,7 +10,6 @@ import socket
 from threading import Thread
 import struct
 from VideoWriter import VideoWriter
-from VideoEncoder import VideoEncoder
 import subprocess
 from FolderStructure import FolderStructure
 from Webserver import Webserver
@@ -42,7 +41,7 @@ class Server:
         self.__to_be_encoded_out, self.__to_be_encoded_in = mp.Pipe(False)
         self.__encoding_queue = PriorityQueue()
         self.__start_handling_unencoded_files_thread()
-        VideoEncoder.encode_rename_and_delete_all_unfinished_raw_files(self.__encoding_queue, self.__logger)
+        FolderStructure.encode_rename_and_delete_all_unfinished_raw_files(self.__encoding_queue, self.__logger)
         # Start Network listening
         self.__start_handling_new_connections_thread()
         self.__logger.debug("[Server]: Server Class Initialized.")
@@ -67,22 +66,9 @@ class Server:
                 priority = 0
                 for _ in range(consecutive_ffmpeg_threads):
                     priority, ffmpeg_command = encoding_queue.get()
-                    log.debug(f"[Server]: ffmpeg command received with priority {priority}.")
-                    proc = subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
-                    log.debug(f"[Server]: ffmpeg process started with {proc.pid} PID.")
+                    proc = self.__start_ffmpeg_process(ffmpeg_command, priority, log)
                     current_running_ffmpeg_processes.append((proc, ffmpeg_command[-1]))  # file path
-                for proc, file_path in current_running_ffmpeg_processes:
-                    proc.wait()
-                    log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished with exit code: {proc.returncode}.")
-                    # TODO: only when concat value > 1
-                    if proc.returncode == 0:
-                        os.remove(re.sub(rf"{config.OutputFileExtension}$", ".raw", file_path))
-                        if FolderStructure.was_renamed(file_path) and priority == 3:
-                            VideoWriter.add_to_be_concat(file_path, self.__logger)
-                        FolderStructure.rename_file_if_not_renamed(file_path, self.__logger)
-                    else:
-                        log.error(proc.stderr)
-                        log.error(proc.stdout)
+                self.__handle_current_running_ffmpeg_processes(current_running_ffmpeg_processes, priority, log)
             log.debug("[Server]: stopped handling unencoded files.")
 
         Thread(target=self.__pass_encoding_requests_from_pipe_to_priority_queue,
@@ -91,6 +77,32 @@ class Server:
 
         Thread(target=loop, args=[self.__is_running, self.__logger, self.__consecutive_ffmpeg_threads,
                                   self.__encoding_queue], daemon=True).start()
+
+    def __start_ffmpeg_process(self, ffmpeg_command, priority, log):
+        log.debug(f"[Server]: ffmpeg command received with priority {priority}.")
+        proc = subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
+        log.debug(f"[Server]: ffmpeg process started with {proc.pid} PID.")
+        return proc
+
+    def __handle_current_running_ffmpeg_processes(self, current_running_ffmpeg_processes, priority, log):
+        for proc, file_path in current_running_ffmpeg_processes:
+            proc.wait()
+            log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished with exit code: {proc.returncode}.")
+            self.__handle_ffmpeg_return_code(proc, file_path, priority, log)
+
+    def __handle_ffmpeg_return_code(self, proc, file_path, priority, log):
+        if proc.returncode == 0:
+            # TODO: maybe make this a function:
+            os.remove(re.sub(rf"{config.OutputFileExtension}$", ".raw", file_path))
+            self.__add_to_concat_file_if_necessary(file_path, priority)
+            FolderStructure.rename_file_if_not_renamed(file_path, self.__logger)
+        else:
+            log.error(proc.stderr)
+            log.error(proc.stdout)
+
+    def __add_to_concat_file_if_necessary(self, file_path, priority):
+        if FolderStructure.was_renamed(file_path) and config.ConcatAmount > 1 and priority == 3:
+            FolderStructure.add_to_be_concat(file_path, self.__logger)
 
     def __pass_encoding_requests_from_pipe_to_priority_queue(self, is_running, pipe_out, encoding_queue, log):
         while is_running.value:
@@ -200,7 +212,6 @@ class Server:
                 pipe.send_bytes(buffer)
                 ws_frames[ip] = buffer
             log.debug(f"[{ip}]: stream stopped..")
-            # TODO: handle webserver stream stop.
 
         p = mp.Process(target=loop, args=(self.__logger, ip_address, stream_connection, height, width,
                                           is_running, pipe_in, webserver_frames), daemon=True)
