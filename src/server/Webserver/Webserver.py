@@ -46,17 +46,20 @@ class Webserver:
     def _generate_frame(self, ip):
         height, width = self.resolutions[ip]
         prev_frame = b""
-        while ip in self.frames.keys():
-            if self.frames[ip] == prev_frame:
-                time.sleep(0.05)
-                continue
-            frame = encode_frame_to_bytes(reshape_np_array(self.frames[ip], height, width))
-            prev_frame = self.frames[ip]
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        self.__logger.debug(f"[{ip}]: Webserver stopped processing frames.")
+        try:
+            while ip in self.frames.keys():
+                if self.frames[ip] == prev_frame:
+                    time.sleep(0.05)
+                    continue
+                frame = encode_frame_to_bytes(reshape_np_array(self.frames[ip], height, width))
+                prev_frame = self.frames[ip]
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        except KeyError:
+            self.__logger.exception(f"[{ip}]: Caused KeyError Exception.")
+        finally:
+            self.__logger.debug(f"[{ip}]: Webserver stopped processing frames.")
 
-    # TODO: yield only current log entries.
     def _generate_log(self):
         log_path = os.path.join(sys.path[-1], "logs")
         with FileReadBackwards(os.path.join(log_path, "server.log"), encoding="utf-8") as log_file:
