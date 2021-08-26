@@ -12,23 +12,19 @@
     <title>Randall</title>
 </head>
 <body>
-<div class="container">
-    <div class="row">
-        <div class="col-lg-8  offset-lg-2">
-            <table>
-                {% for row_number in range(nor) %}
-                <tr>
-                    {% for camera_ip in camera_ips[noc*row_number:noc*(row_number+1)] %}
-                    <td>
-                        <h3 class="mt-5">{{camera_ip}}</h3>
-                        <img src="{{ url_for('_video_feed', ip=camera_ip) }}" alt="Video feed of camera: {{camera_ip}}">
-                    </td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
-    </div>
+<div>
+    <table>
+        {% for row_number in range(nor) %}
+        <tr>
+            {% for camera_ip in camera_ips[noc*row_number:noc*(row_number+1)] %}
+            <td>
+                <h3 class="mt-5">{{camera_ip}}</h3>
+                <img src="{{ url_for('_video_feed', ip=camera_ip) }}" alt="Video feed of camera: {{camera_ip}}">
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </table>
 </div>
 </body>
 </html>
