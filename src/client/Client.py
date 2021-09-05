@@ -98,6 +98,7 @@ class Client:
             elif command == b"q":
                 if len(self.__processes_threads) > 0:
                     self.__stop_stream()
+                self.__management_connection.send(struct.pack(">?", False))
                 self.__close_connections()
                 break
             # Server crashed
@@ -143,7 +144,7 @@ class Client:
         for item in self.__processes_threads:
             self.__logger.debug(f"joining thread: {item}") if isinstance(type(item), type(Thread())) \
                 else self.__logger.debug(f"joining process: {item}")
-            item.join(timeout=15)
+            item.join(timeout=10)
             self.__logger.debug(f"thread joined: {item}") if isinstance(type(item), type(Thread())) \
                 else self.__logger.debug(f"process joined: {item}")
         self.__logger.debug("all threads/processes joined.")

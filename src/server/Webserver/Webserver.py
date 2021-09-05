@@ -81,3 +81,11 @@ class Webserver:
         del self.resolutions[ip]
         self.__logger.debug(f"[{ip}]: resolutions entry deleted.")
         self.__logger.debug(f"[{ip}]: Camera entries deleted.")
+
+    def delete_all_cameras(self):
+        self.__logger.debug("[Server]: deleting all Camera entries...")
+        self.frames.clear()
+        self.__logger.debug("[Server]: all frames entries deleted.")
+        self.resolutions.clear()
+        self.__logger.debug("[Server]: all resolutions entries deleted.")
+        self.__logger.debug("[Server]: All Camera entries deleted.")

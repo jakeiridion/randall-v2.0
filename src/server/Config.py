@@ -4,6 +4,7 @@ import os
 import sys
 from src.shared.ConfigVerifier import ConfigVerifier
 from datetime import datetime
+import re
 
 
 class Config:
@@ -20,6 +21,7 @@ class Config:
         self.__logger.debug("Loading Network settings...")
         self.ServerIP = server_config["Network"]["ServerIP"]
         self.ServerPort = server_config["Network"].getint("ServerPort")
+        self.ClientStoppingPoint = server_config["Network"]["ClientStoppingPoint"]
         self.__logger.debug("Network settings loaded.")
         # Video Variables
         self.__logger.debug("Loading Video settings...")
@@ -52,6 +54,15 @@ class Config:
     def __check_network_settings(self):
         self.__config_verifier.check_ip_address(self.ServerIP)
         self.__config_verifier.check_port(self.ServerPort)
+
+        self.__logger.debug("verifying ClientStoppingPoint.")
+        match = re.match(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]", self.ClientStoppingPoint)
+        print(self.ClientStoppingPoint)
+        if not match and self.ClientStoppingPoint != "None":
+            self.__logger.error("Bad ClientStoppingPoint value in config. "
+                                "Value must be a Time between: 00:00:00-23:59:59 or None.")
+            raise Exception("BAD CLIENT STOPPING VALUE")
+        self.ClientStoppingPoint = match.group(0) if match else None
 
     def __check_video_settings(self):
         self.__config_verifier.check_frame_height(self.DefaultHeight)

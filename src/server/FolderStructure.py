@@ -158,7 +158,9 @@ class FolderStructure:
         concat_file_path = os.path.join(os.path.dirname(file_path), "to_be_concat.temp")
         FolderStructure.__add_to_concat_file(file_path, concat_file_path, log)
         lines = FolderStructure.__get_concat_file_lines(concat_file_path)
-        FolderStructure.__perform_video_concat_if_necessary(lines, concat_file_path, log)
+        if len(lines) == config.ConcatAmount:
+            log.debug("[Server]: concat amount reached.")
+            FolderStructure.__perform_video_concat(concat_file_path, log)
 
     @staticmethod
     def __add_to_concat_file(file_path, concat_file_path, log):
@@ -173,21 +175,22 @@ class FolderStructure:
         return lines
 
     @staticmethod
-    def __perform_video_concat_if_necessary(lines, concat_file_path, log):
-        if len(lines) == config.ConcatAmount:
-            concat_file_paths = FolderStructure.__get_file_names_from_concat_file(lines)
-            log.debug(f"[Server]: concat amount reached.")
-            log.debug("[Server]: creating new output name...")
-            output_name = FolderStructure.__create_concat_output_file_name(concat_file_paths)
-            log.debug(f"[Server]: new output name created: {output_name}")
-            log.debug("[Server]: joining video files...")
-            rc = VideoEncoder.concat_video_files(concat_file_path, output_name, log)
-            FolderStructure.__cleanup_concat_if_successful(rc, concat_file_path, concat_file_paths, log)
+    def __perform_video_concat(concat_file_path, log):
+        log.debug(f"[Server]: concatenating files in concat file: {concat_file_path}")
+        concat_file_paths = FolderStructure.__get_file_names_from_concat_file(concat_file_path)
+        log.debug("[Server]: creating new output name...")
+        output_name = FolderStructure.__create_concat_output_file_name(concat_file_paths)
+        log.debug(f"[Server]: new output name created: {output_name}")
+        log.debug("[Server]: joining video files...")
+        rc = VideoEncoder.concat_video_files(concat_file_path, output_name, log)
+        FolderStructure.__cleanup_concat_if_successful(rc, concat_file_path, concat_file_paths, log)
+        return rc
 
     @staticmethod
-    def __get_file_names_from_concat_file(concat_file_paths_from_file):
+    def __get_file_names_from_concat_file(concat_file_path):
+        lines = FolderStructure.__get_concat_file_lines(concat_file_path)
         pattern = re.compile(r"'([^']+)'")
-        return sorted([pattern.search(file_path).group(1) for file_path in concat_file_paths_from_file])
+        return sorted([pattern.search(file_path).group(1) for file_path in lines])
 
     @staticmethod
     def __create_concat_output_file_name(file_paths):
@@ -208,3 +211,27 @@ class FolderStructure:
     def __delete_files_of_concat_file(file_paths):
         for file in file_paths:
             os.remove(file)
+
+    @staticmethod
+    def concat_all_temp_files(log):
+        log.debug("[Server]: Performing concatenation process with all Client concat files...")
+        temp_files = FolderStructure.__get_all_temp_files(log)
+        return_codes = set()
+        for temp_file in temp_files:
+            rc = FolderStructure.__perform_video_concat(temp_file, log)
+            return_codes.add(rc)
+        # TODO: handle rc
+        log.debug("[Server]: All Client concat file entries concatenated.")
+
+    @staticmethod
+    def __get_all_temp_files(log):
+        log.debug("[Server]: looking for all temp files...")
+        temp_files = []
+        for root, dirs, files in os.walk(os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "cams")):
+            for name in files:
+                path = os.path.join(root, name)
+                if FolderStructure.is_temp_file(path):
+                    log.debug(f".temp file found: {path}")
+                    temp_files.append(path)
+        log.debug("[Server]: finished looking for temp files.")
+        return temp_files

@@ -14,8 +14,11 @@ import subprocess
 from FolderStructure import FolderStructure
 from Webserver import Webserver
 import re
+from datetime import datetime
+import time
 
 
+# TODO: handle socket shutdown!
 class Server:
     def __init__(self):
         self.__logger = create_logger(__name__, config.DebugMode, "server.log")
@@ -25,6 +28,7 @@ class Server:
         self.__stream_connections = {}
         # Processes
         self.__camera_processes = {}
+        # TODO: handle server threads
         self.__server_processes_threads = []
         # Variables
         self.__is_running = mp.Value(ctypes.c_bool, True)
@@ -33,6 +37,7 @@ class Server:
         self.__ip = config.ServerIP
         self.__port = config.ServerPort
         self.__consecutive_ffmpeg_threads = config.ConsecutiveFFMPEGThreads
+        self.__current_running_ffmpeg_processes = 0
         # Network
         self.__tcp_sock = self.__create_tcp_socket()
         # Webserver
@@ -44,6 +49,8 @@ class Server:
         FolderStructure.encode_rename_and_delete_all_unfinished_raw_files(self.__encoding_queue, self.__logger)
         # Start Network listening
         self.__start_handling_new_connections_thread()
+        # Start Client Closing timer
+        self.__start_client_closing_timer_thread()
         self.__logger.debug("[Server]: Server Class Initialized.")
 
     def __create_tcp_socket(self):
@@ -81,12 +88,14 @@ class Server:
     def __start_ffmpeg_process(self, ffmpeg_command, priority, log):
         log.debug(f"[Server]: ffmpeg command received with priority {priority}.")
         proc = subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
+        self.__current_running_ffmpeg_processes += 1
         log.debug(f"[Server]: ffmpeg process started with {proc.pid} PID.")
         return proc
 
     def __handle_current_running_ffmpeg_processes(self, current_running_ffmpeg_processes, priority, log):
         for proc, file_path in current_running_ffmpeg_processes:
             proc.wait()
+            self.__current_running_ffmpeg_processes -= 1
             log.debug(f"[Server]: ffmpeg process with {proc.pid} PID finished with exit code: {proc.returncode}.")
             self.__handle_ffmpeg_return_code(proc, file_path, priority, log)
 
@@ -179,6 +188,11 @@ class Server:
                 elif request == struct.pack(">?", True):
                     log.debug(f"[{ip}]: requests stream start...")
                     self.__start_stream(log, is_running, height, width, ip, conn, fps)
+                # client closed
+                elif request == struct.pack(">?", False):
+                    log.debug(f"[{ip}]: client shutting down...")
+                    self.__close_client(ip, is_running)
+                    break
                 # client crashed
                 elif request == b"":
                     self.__handle_client_crash(is_running, ip)
@@ -218,6 +232,10 @@ class Server:
         p.start()
         self.__camera_processes[ip_address] = [p]
 
+    def __close_client(self, ip, is_running):
+        is_running.value = False
+        self.__join_all_client_processes(ip)
+
     def __handle_client_crash(self, is_running, ip):
         self.__logger.warning("Client crashed!")
         self.__logger.info("Handling client crash...")
@@ -252,17 +270,64 @@ class Server:
         del self.__stream_connections[ip]
         self.__logger.debug(f"[{ip}]: stream connection deleted.")
 
-    def stop_all_streams(self):
-        for key in self.__management_connections:
-            self.__management_connections[key].send(struct.pack(">?", False))
-            self.__join_all_client_processes(key)
+    def __start_client_closing_timer_thread(self):
+        self.__logger.debug(f"[Server]: Client Closing time: {config.ClientStoppingPoint}")
+        if config.ClientStoppingPoint is not None:
+            self.__logger.debug("[Server]: Starting Client Closing Timer thread...")
 
-    def restart_stream(self):
-        for key in self.__management_connections:
-            self.__management_connections[key].send(struct.pack(">?", True))
+            def loop(is_running, log):
+                while is_running.value:
+                    time.sleep(self.__calculate_time_until_closing())
+                    log.debug(f"[Server]: Client Closing Time reached: {config.ClientStoppingPoint}.")
+                    self.__close_all_clients()
+                    time.sleep(3)
+            Thread(target=loop, args=[self.__is_running, self.__logger], daemon=True).start()
 
-    def quit_all_clients(self):
-        pass
+    def __calculate_time_until_closing(self):
+        self.__logger.debug("[Server]: Calculating Client Closing Time...")
+        closing_time_obj = datetime.strptime(config.ClientStoppingPoint, "%H:%M:%S")
+        closing_time_obj = datetime.now().replace(hour=closing_time_obj.hour, minute=closing_time_obj.minute,
+                                                  second=closing_time_obj.second, microsecond=0)
+        time_until_closing = closing_time_obj - datetime.now()
+        time_until_closing = time_until_closing.seconds
+        self.__logger.debug(f"[Server]: Client Closing Time Calculated: {time_until_closing} seconds.")
+        return time_until_closing
+
+    def __close_all_clients(self):
+        self.__logger.debug("[Server]: Closing all Client connections...")
+        for key in self.__management_connections:
+            self.__logger.debug(f"[{key}]: Sending Closing Command.")
+            self.__management_connections[key].send(b"q")
+        self.__logger.debug("[Server]: All Client Connection Closing commands have been sent.")
+        self.__cleanup_after_all_clients_close()
+
+    def __cleanup_after_all_clients_close(self):
+        self.__logger.debug("[Server]: Cleaning up all Clients Closing")
+        self.__wait_until_all_camera_processes_have_concluded()
+        self.__clear_all_clients_from_connections_dict()
+        self.webserver.delete_all_cameras()
+        self.__wait_until_all_planned_and_running_ffmpeg_processes_conclude()
+        FolderStructure.concat_all_temp_files(self.__logger)
+        self.__logger.debug("[Server]: All Clients Closing cleaned up.")
+
+    def __wait_until_all_camera_processes_have_concluded(self):
+        self.__logger.debug("[Server]: Waiting until all Camera process have concluded...")
+        while len(self.__camera_processes) > 0:
+            pass
+        self.__logger.debug("[Server]: All Camera process have concluded.")
+
+    def __clear_all_clients_from_connections_dict(self):
+        self.__logger.debug("[Server]: deleting all client connections from server memory...")
+        self.__management_connections.clear()
+        self.__logger.debug("[Server]: management connections deleted.")
+        self.__stream_connections.clear()
+        self.__logger.debug("[Server]: stream connections deleted.")
+
+    def __wait_until_all_planned_and_running_ffmpeg_processes_conclude(self):
+        self.__logger.debug("[Server]: Waiting until all planned and running ffmpeg processes conclude...")
+        while self.__current_running_ffmpeg_processes != 0 and self.__encoding_queue.qsize() > 0:
+            pass
+        self.__logger.debug("[Server]: All planned and running ffmpeg processes have concluded.")
 
 
 if __name__ == '__main__':
