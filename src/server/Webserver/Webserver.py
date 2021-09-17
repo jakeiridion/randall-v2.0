@@ -36,7 +36,8 @@ class Webserver:
 
         @_app.route("/")
         def _index():
-            return render_template("index.html", camera_ips=sorted(list(self.frames.keys())), noc=self.__number_of_columns,
+            return render_template("index.html", camera_ips=sorted(list(self.frames.keys())),
+                                   noc=self.__number_of_columns,
                                    nor=self.__calculate_row_number(self.__number_of_columns, len(self.frames)))
 
         # p = mp.Process(target=_app.run, kwargs={"debug": False, "host": "0.0.0.0", "port": 8080})
@@ -46,6 +47,7 @@ class Webserver:
     def _generate_frame(self, ip):
         height, width = self.resolutions[ip]
         prev_frame = b""
+        self.__logger.debug(f"[{ip}]: Webserver started displaying frames...")
         try:
             while ip in self.frames.keys():
                 if self.frames[ip] == prev_frame:
@@ -58,7 +60,7 @@ class Webserver:
         except KeyError:
             self.__logger.exception(f"[{ip}]: Caused KeyError Exception.")
         finally:
-            self.__logger.debug(f"[{ip}]: Webserver stopped processing frames.")
+            self.__logger.debug(f"[{ip}]: Webserver stopped displaying frames.")
 
     def _generate_log(self):
         log_path = os.path.join(sys.path[-1], "logs")
