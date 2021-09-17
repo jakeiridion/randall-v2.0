@@ -34,7 +34,8 @@ class VideoWriter:
 
     def __write_video(self, is_running, pipe_out, encoding_pipe_in, log, ip):
         cut_bool = mp.Value(ctypes.c_bool, True)
-        self.__start_cut_timer_thread(cut_bool, is_running, log, ip)
+        if not config.VideoCutTime:
+            self.__start_cut_timer_thread(cut_bool, is_running, log, ip)
         while is_running.value:
             output_path = self.__folder_structure.get_output_path()
             self.__create_and_write_to_output_file(output_path, cut_bool, is_running, pipe_out, log, ip)
