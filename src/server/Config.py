@@ -29,10 +29,12 @@ class Config:
         self.DefaultWidth = server_config["Video"].getint("DefaultWidth")
         self.FFMPEGOutputFileOptions = server_config["Video"]["FFMPEGOutputFileOptions"].strip()
         self.OutputFileExtension = server_config["Video"]["OutputFileExtension"]
-        self.StoragePath = server_config["Video"]["StoragePath"]
         self.VideoCutTime = server_config["Video"]["VideoCutTime"]
         self.ConcatAmount = server_config["Video"].getint("ConcatAmount")
         self.__logger.debug("Video settings loaded.")
+        # Storage Variables
+        self.StoragePath = server_config["Storage"]["StoragePath"]
+        self.FreeStorageAmountBeforeDeleting = server_config["Storage"].getint("FreeStorageAmountBeforeDeleting")
         # Process Variables
         self.__logger.debug("Loading Process settings...")
         self.ConsecutiveFFMPEGThreads = server_config["Processes"].getint("ConsecutiveFFMPEGThreads")
@@ -46,6 +48,7 @@ class Config:
         self.__config_verifier = ConfigVerifier(self.__logger)
         self.__check_network_settings()
         self.__check_video_settings()
+        self.__check_storage_settings()
         self.__check_process_settings()
         self.__check_webserver_settings()
         self.__logger.debug("settings verified.")
@@ -57,7 +60,6 @@ class Config:
 
         self.__logger.debug("verifying ClientStoppingPoint.")
         match = re.match(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]", self.ClientStoppingPoint)
-        print(self.ClientStoppingPoint)
         if not match and self.ClientStoppingPoint != "None":
             self.__logger.error("Bad ClientStoppingPoint value in config. "
                                 "Value must be a Time between: 00:00:00-23:59:59 or None.")
@@ -69,30 +71,39 @@ class Config:
         self.__config_verifier.check_frame_width(self.DefaultWidth)
 
         self.__logger.debug("verifying VideoCutTime.")
-        if self.VideoCutTime == "00:00:00":
-            raise Exception("BAD VIDEO CUT TIME VALUE")
-        try:
-            datetime.strptime(self.VideoCutTime, "%H:%M:%S")
-        except ValueError:
-            self.__logger.error("Bad VideoCutTime value in config. Max Value: 23:59:59")
-            raise Exception("BAD VIDEO CUT TIME VALUE")
+        if self.VideoCutTime == "None":
+            self.VideoCutTime = None
         else:
-            self.VideoCutTime = datetime.strptime(self.VideoCutTime, "%H:%M:%S")
+            if self.VideoCutTime == "00:00:00":
+                raise Exception("BAD VIDEO CUT TIME VALUE")
+            try:
+                datetime.strptime(self.VideoCutTime, "%H:%M:%S")
+            except ValueError:
+                self.__logger.error("Bad VideoCutTime value in config. Max Value: 23:59:59 OR None")
+                raise Exception("BAD VIDEO CUT TIME VALUE")
+            else:
+                self.VideoCutTime = datetime.strptime(self.VideoCutTime, "%H:%M:%S")
 
         self.__logger.debug("verifying FFMPEGOutputFileOptions.")
         if "&&" in self.FFMPEGOutputFileOptions:
             self.__logger.error("FFMPEG options can not contain '&&'.")
             raise Exception("BAD FFMPEG OUTPUT FILE OPTIONS")
 
+        self.__logger.debug("verifying ConcatAmount.")
+        if self.ConcatAmount < 1:
+            self.__logger.debug("Bad ConcatAmount value. Value can not be negative or 0.")
+            raise Exception("BAD CONCAT AMOUNT")
+
+    def __check_storage_settings(self):
         self.__logger.debug("verifying StoragePath.")
         if not os.path.isdir(self.StoragePath):
             self.__logger.debug("Bad StoragePath value. Directory doesn't exist.")
             raise Exception("BAD STORAGE PATH")
 
-        self.__logger.debug("verifying ConcatAmount.")
-        if self.ConcatAmount < 1:
-            self.__logger.debug("Bad ConcatAmount value. Value can not be negative or 0.")
-            raise Exception("BAD CONCAT AMOUNT")
+        self.__logger.debug("verifying FreeStorageAmountBeforeDeleting.")
+        if self.FreeStorageAmountBeforeDeleting <= 0:
+            self.__logger.debug("Bad FreeStorageAmountBeforeDeleting value. Value Can not be negative or zero")
+            raise Exception("BAD FREE STORAGE AMOUNT BEFORE DELETING")
 
     def __check_process_settings(self):
         self.__logger.debug("verifying ConsecutiveFFMPEGThreads.")
