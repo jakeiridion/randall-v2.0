@@ -49,6 +49,10 @@ class Server:
         FolderStructure.encode_rename_and_delete_all_unfinished_raw_files(self.__encoding_queue, self.__logger)
         # Start Network listening
         self.__start_handling_new_connections_thread()
+        # Start Disk Space monitoring
+        Thread(target=FolderStructure.monitor_free_disk_space,
+               args=[self.__is_running, self.__logger],
+               daemon=True).start()
         # Start Client Closing timer
         self.__start_client_closing_timer_thread()
         self.__logger.debug("[Server]: Server Class Initialized.")
@@ -222,7 +226,7 @@ class Server:
             while is_run.value:
                 buffer = b""
                 while len(buffer) < frame_byte_size and is_run.value:
-                    buffer += conn.recv(frame_byte_size-len(buffer))
+                    buffer += conn.recv(frame_byte_size - len(buffer))
                 pipe.send_bytes(buffer)
                 ws_frames[ip] = buffer
             log.debug(f"[{ip}]: stream stopped..")
@@ -281,6 +285,7 @@ class Server:
                     log.debug(f"[Server]: Client Closing Time reached: {config.ClientStoppingPoint}.")
                     self.__close_all_clients()
                     time.sleep(3)
+
             Thread(target=loop, args=[self.__is_running, self.__logger], daemon=True).start()
 
     def __calculate_time_until_closing(self):

@@ -6,6 +6,8 @@ from src.shared.Logger import create_logger
 from src.server.Config import config
 import re
 import struct
+import shutil
+import time
 from VideoEncoder import VideoEncoder
 
 
@@ -38,13 +40,10 @@ class FolderStructure:
 
     def __remove_temp_files_if_found(self):
         self.__logger.debug(f"[{self.__ip}]: looking for leftover temporary files.")
-        for root, dirs, files in os.walk(self.__ip_camera_path):
-            for name in files:
-                path = os.path.join(root, name)
-                if FolderStructure.is_temp_file(path):
-                    self.__logger.debug(f"[{self.__ip}]: leftover temporary concat file found: {path}")
-                    os.remove(path)
-                    self.__logger.debug(f"[{self.__ip}]: concat file {path} removed.")
+        for temp_file in FolderStructure.__get_all_temp_files(self.__logger):
+            self.__logger.debug(f"[{self.__ip}]: leftover temporary concat file found: {temp_file}")
+            os.remove(temp_file)
+            self.__logger.debug(f"[{self.__ip}]: concat file {temp_file} removed.")
 
     def get_output_path(self):
         folder_date_name = datetime.now().strftime('%Y-%m-%d')
@@ -75,19 +74,42 @@ class FolderStructure:
         log.debug("[Server]: handled unfinished files.")
 
     @staticmethod
+    def __get_all_temp_files(log):
+        log.debug("[Server]: looking for all temp files...")
+        temp_files = list(filter(
+            lambda file: FolderStructure.is_temp_file(file),
+            FolderStructure.__get_all_files_from_cam_dir()
+        ))
+        log.debug("[Server]: finished looking for temp files.")
+        return temp_files
+
+    @staticmethod
     def __find_unfinished_files(log):
-        raw_files = []
-        to_be_renamed = []
-        for root, dirs, files in os.walk(os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "cams")):
+        cam_files = FolderStructure.__get_all_files_from_cam_dir()
+        raw_files = list(filter(
+            lambda file: file.endswith(".raw"),
+            cam_files
+        ))
+        to_be_renamed = list(filter(
+            lambda file: not FolderStructure.was_renamed(file) and not FolderStructure.is_temp_file(file),
+            cam_files
+        ))
+
+        for raw_file in raw_files:
+            log.debug(f"[Server]: leftover raw file found: {raw_file}")
+        for tbr in to_be_renamed:
+            log.debug(f"[Server]: not renamed video file found: {tbr}")
+
+        return raw_files, to_be_renamed
+
+    @staticmethod
+    def __get_all_files_from_cam_dir():
+        all_cam_files = []
+        for root, dirs, files in os.walk(os.path.join(config.StoragePath, "cams")):
             for name in files:
                 path = os.path.join(root, name)
-                if path.endswith(".raw"):
-                    log.debug(f"[Server]: leftover raw file found: {path}")
-                    raw_files.append(path)
-                elif not FolderStructure.was_renamed(path) and not FolderStructure.is_temp_file(path):
-                    log.debug(f"[Server]: not renamed video file found: {path}")
-                    to_be_renamed.append(path)
-        return raw_files, to_be_renamed
+                all_cam_files.append(path)
+        return all_cam_files
 
     @staticmethod
     def __handle_raw_files(raw_files, encoding_queue, log):
@@ -224,14 +246,43 @@ class FolderStructure:
         log.debug("[Server]: All Client concat file entries concatenated.")
 
     @staticmethod
-    def __get_all_temp_files(log):
-        log.debug("[Server]: looking for all temp files...")
-        temp_files = []
-        for root, dirs, files in os.walk(os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "cams")):
-            for name in files:
-                path = os.path.join(root, name)
-                if FolderStructure.is_temp_file(path):
-                    log.debug(f".temp file found: {path}")
-                    temp_files.append(path)
-        log.debug("[Server]: finished looking for temp files.")
-        return temp_files
+    def monitor_free_disk_space(is_running, log):
+        log.debug("[Server]: start monitoring free disk space...")
+        while is_running.value:
+            disk_space = FolderStructure.__get_free_disk_space_in_bytes()
+            if disk_space and disk_space <= config.FreeStorageAmountBeforeDeleting:
+                log.debug(f"[Server]: Disk Space reached: {config.FreeStorageAmountBeforeDeleting} bytes.")
+                FolderStructure.__delete_oldest_camera_recording(log)
+            time.sleep(10)
+        log.debug("[Server]: stopped monitoring free disk space.")
+
+    @staticmethod
+    def __get_free_disk_space_in_bytes():
+        try:
+            total, used, free = shutil.disk_usage(config.StoragePath)
+            return free
+        except FileNotFoundError:
+            return 0
+
+    @staticmethod
+    def __delete_oldest_camera_recording(log):
+        log.debug("[Server]: Looking for oldest video file...")
+        cam_files = FolderStructure.__get_all_files_from_cam_dir()
+        cam_files = list(
+            filter(
+                lambda cam_file:
+                not FolderStructure.is_temp_file(cam_file) and not FolderStructure.__is_raw_file(cam_file),
+                sorted(cam_files, key=lambda file: os.path.getmtime(file))
+            )
+        )
+        if cam_files:
+            to_be_deleted = cam_files.pop(0)
+            log.debug(f"[Server]: Deleting oldest file to make space: {to_be_deleted}.")
+            os.remove(to_be_deleted)
+        log.debug("[Server]: Stopped looking for oldest video file.")
+
+    @staticmethod
+    def __is_raw_file(file_path):
+        if file_path.endswith(".raw"):
+            return True
+        return False
