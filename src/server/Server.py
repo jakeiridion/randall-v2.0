@@ -228,7 +228,6 @@ class Server:
                 buffer = b""
                 while len(buffer) < frame_byte_size and is_run.value:
                     buffer += conn.recv(frame_byte_size - len(buffer))
-                print(len(buffer))
                 pipe.send_bytes(buffer)
                 ws_frames[ip] = buffer
             log.debug(f"[{ip}]: stream stopped..")
