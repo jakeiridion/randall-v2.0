@@ -62,7 +62,7 @@ class Server:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
         sock.setblocking(True)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 360448)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1152000*5)
         # print(sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF))
         sock.bind((self.__ip, self.__port))
         self.__logger.debug("[Server]: tcp socket created.")

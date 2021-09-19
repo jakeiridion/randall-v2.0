@@ -40,7 +40,7 @@ class Client:
             result = sock.connect_ex((self.__ip, self.__port))
             if result == 0:
                 sock.setblocking(True)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 360448)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1152000*2)
                 # print(sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF))
                 self.__logger.debug("connection created.")
                 return sock
