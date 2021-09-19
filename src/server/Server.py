@@ -182,7 +182,8 @@ class Server:
                 elif request == b"sr":
                     log.debug(f"[{ip}]: requests use of custom resolution")
                     log.debug(f"[{ip}]: receiving custom resolution...")
-                    height, width = ip, struct.unpack(">2H", conn.recv(struct.calcsize(">2H")))
+                    height, width = struct.unpack(">2H", conn.recv(struct.calcsize(">2H")))
+                    print(height, width)
                     log.debug(f"[{ip}]: custom resolution received.")
                 # set fps
                 elif request == b"sf":
@@ -227,6 +228,7 @@ class Server:
                 buffer = b""
                 while len(buffer) < frame_byte_size and is_run.value:
                     buffer += conn.recv(frame_byte_size - len(buffer))
+                print(len(buffer))
                 pipe.send_bytes(buffer)
                 ws_frames[ip] = buffer
             log.debug(f"[{ip}]: stream stopped..")
