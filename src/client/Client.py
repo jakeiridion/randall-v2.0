@@ -122,7 +122,6 @@ class Client:
                 while is_running.value:
                     frame = pipe.recv_bytes()
                     conn.sendall(frame)
-                    time.sleep(wait_frame)
             except (BrokenPipeError, OSError) as e:
                 log.warning(e)
                 log.debug("Handled TCP error from server crash.")

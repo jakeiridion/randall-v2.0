@@ -15,7 +15,7 @@ class VideoEncoder:
                           "-vcodec", "rawvideo",
                           "-video_size", f"{width}x{height}",
                           "-pixel_format", "bgr24",
-                          "-framerate", str(fps),
+                          "-framerate", "5",
                           "-i", input_path]
         ffmpeg_command += config.FFMPEGOutputFileOptions.split(" ")
         ffmpeg_command.append(final_output_path)

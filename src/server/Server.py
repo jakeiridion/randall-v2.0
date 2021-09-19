@@ -46,7 +46,7 @@ class Server:
         self.__to_be_encoded_out, self.__to_be_encoded_in = mp.Pipe(False)
         self.__encoding_queue = PriorityQueue()
         self.__start_handling_unencoded_files_thread()
-        FolderStructure.encode_rename_and_delete_all_unfinished_raw_files(self.__encoding_queue, self.__logger)
+        # FolderStructure.encode_rename_and_delete_all_unfinished_raw_files(self.__encoding_queue, self.__logger)
         # Start Network listening
         self.__start_handling_new_connections_thread()
         # Start Disk Space monitoring
@@ -106,7 +106,7 @@ class Server:
     def __handle_ffmpeg_return_code(self, proc, file_path, priority, log):
         if proc.returncode == 0:
             # TODO: maybe make this a function:
-            os.remove(re.sub(rf"{config.OutputFileExtension}$", ".raw", file_path))
+            # os.remove(re.sub(rf"{config.OutputFileExtension}$", ".raw", file_path))
             self.__add_to_concat_file_if_necessary(file_path, priority)
             FolderStructure.rename_file_if_not_renamed(file_path, self.__logger)
         else:
